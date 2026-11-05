@@ -146,6 +146,20 @@ def _reject_twaves(
     return np.asarray(accepted, dtype=np.int64)
 
 
+def beat_intervals(peaks: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+    """Physiologic RR intervals from QRS sample indices.
+
+    Returns ``(beat_times_s, rr_s)``: each RR interval is stamped with the time of
+    the beat that closes it, so an interval is only known once that beat happened.
+    Intervals outside HR_MIN_BPM..HR_MAX_BPM are dropped.
+    """
+    times = np.asarray(peaks, dtype=np.float64) / fs
+    rr = np.diff(times)
+    rate = 60.0 / np.maximum(rr, 1e-6)
+    keep = (rate >= HR_MIN_BPM) & (rate <= HR_MAX_BPM)
+    return times[1:][keep], rr[keep]
+
+
 def heart_rate_grid(
     ecg: np.ndarray, fs: float, n_seconds: int, *, min_beats: int = 100
 ) -> tuple[np.ndarray | None, dict]:
@@ -162,21 +176,16 @@ def heart_rate_grid(
         info["reason"] = f"only {len(peaks)} beats detected (need >={min_beats})"
         return None, info
 
-    times = peaks / fs
-    rr = np.diff(times)
-    rate = 60.0 / np.maximum(rr, 1e-6)
-
-    physiologic = (rate >= HR_MIN_BPM) & (rate <= HR_MAX_BPM)
-    info["frac_physiologic"] = float(np.mean(physiologic))
-    if physiologic.sum() < min_beats:
+    beat_times, rr = beat_intervals(peaks, fs)
+    info["frac_physiologic"] = float(len(rr) / max(len(peaks) - 1, 1))
+    if len(rr) < min_beats:
         info["reason"] = (
-            f"only {int(physiologic.sum())} physiologic intervals "
-            f"({info['frac_physiologic']:.1%} of {len(rate)})"
+            f"only {len(rr)} physiologic intervals "
+            f"({info['frac_physiologic']:.1%} of {len(peaks) - 1})"
         )
         return None, info
 
-    beat_times = times[1:][physiologic]
-    beat_rates = rate[physiologic]
+    beat_rates = 60.0 / rr
 
     grid = np.interp(
         np.arange(n_seconds, dtype=np.float64),
