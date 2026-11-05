@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import SLEEP_STAGES, classify_arousals, sleep_stage_epochs
+from neurotwin.adapters.nsrr import SLEEP_STAGES, classify_arousals, event_kind, sleep_stage_epochs
 
 HORIZONS_S = (5, 15, 30, 60, 120)
 STEP_S = 5.0
@@ -29,10 +29,9 @@ def _disturbance_times(events: list[tuple[str, float, float]]) -> np.ndarray:
     consecutive same-stage epochs into one event, so Wake events can be long."""
     times = []
     for concept, start, _ in events:
-        c = concept.lower()
         if concept == "Wake":
             times.append(start + EPOCH_S)
-        elif "arousal" in c or "apnea" in c or "hypopnea" in c or "limb" in c or "leg movement" in c:
+        elif event_kind(concept) is not None:
             times.append(start)
     return np.sort(np.asarray(times, dtype=np.float64))
 
@@ -115,7 +114,7 @@ PRIOR_NAMES = ("since_last_arousal_s", "since_sleep_onset_s", "stage_n1", "stage
 def prior_features(events: list[tuple[str, float, float]], anchors: np.ndarray) -> np.ndarray:
     """Context a clinician-free model could know at t: time since the last arousal
     onset, time since the first scored sleep epoch, and the last completed stage."""
-    onsets = np.sort(np.asarray([s for c, s, _ in events if "arousal" in c.lower()], dtype=np.float64))
+    onsets = np.sort(np.asarray([s for c, s, _ in events if event_kind(c) == "arousal"], dtype=np.float64))
     stages = sleep_stage_epochs(events)
     sleep_onset = next((s for s, _, c in stages if c in SLEEP_STAGES), 0.0)
     k = np.searchsorted(onsets, anchors, side="right") - 1

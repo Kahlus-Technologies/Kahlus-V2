@@ -105,11 +105,23 @@ def stage_at(stages: list[tuple[float, float, str]], t: float) -> str | None:
     return None
 
 
+def event_kind(concept: str) -> str | None:
+    """Coarse category of an NSRR EventConcept: arousal, respiratory, limb, or None."""
+    c = concept.lower()
+    if "arousal" in c:
+        return "arousal"
+    if "apnea" in c or "hypopnea" in c:
+        return "respiratory"
+    if "limb" in c or "leg movement" in c:
+        return "limb"
+    return None
+
+
 def classify_arousals(events: list[tuple[str, float, float]]) -> list[Arousal]:
-    low = [(c.lower(), s, d) for c, s, d in events]
-    onsets = sorted(s for c, s, _ in low if "arousal" in c)
-    resp = [(s, s + d) for c, s, d in low if "apnea" in c or "hypopnea" in c]
-    limb = [(s, s + d) for c, s, d in low if "limb" in c or "leg movement" in c]
+    kinds = [(event_kind(c), s, d) for c, s, d in events]
+    onsets = sorted(s for k, s, _ in kinds if k == "arousal")
+    resp = [(s, s + d) for k, s, d in kinds if k == "respiratory"]
+    limb = [(s, s + d) for k, s, d in kinds if k == "limb"]
     stages = sleep_stage_epochs(events)
     disturb = onsets + [s for s, _ in resp] + [s for s, _ in limb] + [s for s, _, c in stages if c == "Wake"]
 
