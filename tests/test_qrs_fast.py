@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs, good_beat_mask, heart_rate_grid
+from neurotwin.adapters.qrs_fast import CAUSAL_LATENCY_S, beat_intervals, detect_qrs, good_beat_mask, heart_rate_grid
 
 
 def synthetic_ecg(fs: float, seconds: float, bpm: float, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -39,6 +39,30 @@ class QrsTests(unittest.TestCase):
         hr, info = heart_rate_grid(ecg, 125.0, 300)
         self.assertIsNotNone(hr)
         self.assertAlmostEqual(info["median_bpm"], 70.0, delta=1.0)
+
+    def test_causal_mode_ignores_the_future(self) -> None:
+        fs = 125.0
+        ecg, truth = synthetic_ecg(fs, 200, bpm=60)
+        cut = int(100 * fs)
+        full = detect_qrs(ecg, fs, causal=True)
+        changed = ecg.copy()
+        changed[cut:] *= 2.0  # amplitude step after t = 100 s
+        changed[cut:] += 0.5 * np.random.default_rng(1).standard_normal(changed.size - cut)
+        limit = (100.0 - CAUSAL_LATENCY_S) * fs
+        a = full[full < limit]
+        b = detect_qrs(changed, fs, causal=True)
+        np.testing.assert_array_equal(a, b[b < limit])
+        np.testing.assert_array_equal(a, detect_qrs(ecg[:cut], fs, causal=True)[: a.size])
+
+    def test_causal_mode_still_finds_beats(self) -> None:
+        for fs in (125.0, 256.0):
+            ecg, truth = synthetic_ecg(fs, 120, bpm=62)
+            truth = truth[truth >= 2.0 * fs]  # warmup window is skipped
+            peaks = detect_qrs(ecg, fs, causal=True)
+            self.assertLessEqual(abs(len(peaks) - len(truth)), 1, fs)
+            lag = np.median(peaks[: len(truth)] - truth[: len(peaks)]) / fs
+            self.assertTrue(0.0 <= lag < 0.2, lag)  # constant delay, never early
+            np.testing.assert_allclose(np.median(np.diff(peaks)) / fs, 60 / 62, atol=0.01)
 
     def test_good_beat_mask_drops_double_counted_block(self) -> None:
         normal = np.arange(0.0, 600.0, 1.0)  # 60 bpm for 10 min

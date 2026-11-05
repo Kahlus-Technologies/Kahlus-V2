@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d, uniform_filter1d
-from scipy.signal import butter, filtfilt, find_peaks
+from scipy.signal import butter, filtfilt, find_peaks, lfilter
 
 #: Absolute refractory period. No two QRS complexes can be closer than this
 #: (300 bpm ceiling).
@@ -47,9 +47,16 @@ HR_MAX_BPM = 220.0
 THRESH_WINDOW_S = 8.0
 #: Fraction of the local maximum used as the detection threshold.
 THRESH_FRACTION = 0.30
+#: In causal mode a beat at time b depends on ECG up to b + this. find_peaks needs
+#: the next sample, and the T-wave slope check reads +/-50 ms around the peak.
+CAUSAL_LATENCY_S = 0.06
+#: Causal detections in the first seconds come from the forward filter's startup
+#: transient, not from beats. Causal beats also lag the true R peak by a constant
+#: ~0.13 s (filter group delay + trailing integration); RR intervals are unaffected.
+CAUSAL_WARMUP_S = 2.0
 
 
-def detect_qrs(ecg: np.ndarray, fs: float) -> np.ndarray:
+def detect_qrs(ecg: np.ndarray, fs: float, *, causal: bool = False) -> np.ndarray:
     """Return QRS sample indices. Vectorized; ~200x faster than xqrs.
 
     Parameters
@@ -58,6 +65,12 @@ def detect_qrs(ecg: np.ndarray, fs: float) -> np.ndarray:
         Raw ECG samples. Scaling is irrelevant (the threshold is relative).
     fs:
         Sampling rate in Hz.
+    causal:
+        If True, every stage uses only past samples (forward-only filter,
+        trailing integration and threshold windows), so a beat detected at
+        time b never depends on signal after b + CAUSAL_LATENCY_S. Use this for
+        any forecasting feature. The default zero-phase mode is more accurate
+        for offline beat timing but looks up to THRESH_WINDOW_S / 2 ahead.
     """
     x = np.asarray(ecg, dtype=np.float64)
     if len(x) < int(fs * 10):
@@ -73,7 +86,7 @@ def detect_qrs(ecg: np.ndarray, fs: float) -> np.ndarray:
     nyq = fs / 2.0
     low, high = 5.0 / nyq, min(15.0 / nyq, 0.99)
     b, a = butter(2, [low, high], btype="band")
-    filtered = filtfilt(b, a, x)
+    filtered = lfilter(b, a, x) if causal else filtfilt(b, a, x)
 
     # 2-3. Derivative then square: emphasises the steep QRS slope and makes
     #      the signal strictly positive.
@@ -83,13 +96,13 @@ def detect_qrs(ecg: np.ndarray, fs: float) -> np.ndarray:
     # 4. Moving-window integration over ~QRS width turns the spiky squared
     #    derivative into one smooth bump per beat.
     win = max(1, int(0.15 * fs))
-    integrated = uniform_filter1d(squared, size=win, mode="nearest")
+    integrated = _trailing(uniform_filter1d, squared, win) if causal else uniform_filter1d(squared, size=win, mode="nearest")
 
     # 5. Block-adaptive threshold. maximum_filter1d gives the local peak
     #    amplitude at every sample in O(n); scaling it tracks amplitude drift
     #    across the night without a Python loop.
     tw = max(win * 4, int(THRESH_WINDOW_S * fs))
-    local_max = maximum_filter1d(integrated, size=tw, mode="nearest")
+    local_max = _trailing(maximum_filter1d, integrated, tw) if causal else maximum_filter1d(integrated, size=tw, mode="nearest")
     threshold = THRESH_FRACTION * local_max
 
     # 6. Peak picking with a hard refractory distance.
@@ -97,6 +110,8 @@ def detect_qrs(ecg: np.ndarray, fs: float) -> np.ndarray:
     if len(candidates) == 0:
         return np.zeros(0, dtype=np.int64)
     keep = integrated[candidates] > threshold[candidates]
+    if causal:
+        keep &= candidates >= int(CAUSAL_WARMUP_S * fs)  # forward filter is still ringing
     candidates = candidates[keep]
     if len(candidates) < 2:
         return candidates.astype(np.int64)
@@ -106,6 +121,11 @@ def detect_qrs(ecg: np.ndarray, fs: float) -> np.ndarray:
     #    into two wrong ones, which destroys the rate series even when every real
     #    beat was found. Discriminate on slope: a QRS is steep, a T-wave is not.
     return _reject_twaves(candidates, np.abs(deriv), fs)
+
+
+def _trailing(filt, x: np.ndarray, size: int) -> np.ndarray:
+    """scipy 1-D window filter whose window at sample i covers [i - size + 1, i]."""
+    return filt(x, size=size, mode="nearest", origin=(size - 1) // 2)
 
 
 def _reject_twaves(
