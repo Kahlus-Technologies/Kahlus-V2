@@ -160,6 +160,25 @@ def beat_intervals(peaks: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray
     return times[1:][keep], rr[keep]
 
 
+#: Sleeping adults rarely hold a median above this for minutes; sustained values
+#: above it are T-wave double-counting (seen in SHHS1 200002 from hour 4 on).
+QUALITY_MAX_MEDIAN_BPM = 110.0
+QUALITY_WINDOW_S = 300.0
+
+
+def good_beat_mask(beat_times: np.ndarray, rr: np.ndarray) -> np.ndarray:
+    """False for intervals inside a ``QUALITY_WINDOW_S`` block whose median HR is
+    implausible for sleep. Block-wise, not per beat, so a real tachycardic burst
+    survives but an hour of double-counted beats does not."""
+    block = (beat_times // QUALITY_WINDOW_S).astype(np.int64)
+    good = np.ones(rr.size, dtype=bool)
+    for b in np.unique(block):
+        sel = block == b
+        if 60.0 / np.median(rr[sel]) > QUALITY_MAX_MEDIAN_BPM:
+            good[sel] = False
+    return good
+
+
 def heart_rate_grid(
     ecg: np.ndarray, fs: float, n_seconds: int, *, min_beats: int = 100
 ) -> tuple[np.ndarray | None, dict]:

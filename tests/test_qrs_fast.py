@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs, heart_rate_grid
+from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs, good_beat_mask, heart_rate_grid
 
 
 def synthetic_ecg(fs: float, seconds: float, bpm: float, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -39,6 +39,18 @@ class QrsTests(unittest.TestCase):
         hr, info = heart_rate_grid(ecg, 125.0, 300)
         self.assertIsNotNone(hr)
         self.assertAlmostEqual(info["median_bpm"], 70.0, delta=1.0)
+
+    def test_good_beat_mask_drops_double_counted_block(self) -> None:
+        normal = np.arange(0.0, 600.0, 1.0)  # 60 bpm for 10 min
+        doubled = np.arange(600.0, 900.0, 0.4)  # 150 bpm for 5 min
+        burst = np.arange(900.0, 1500.0, 1.0)
+        burst[100:110] = burst[100] + np.arange(10) * 0.45  # 10-beat tachy burst, keep
+        beats = np.sort(np.unique(np.concatenate([normal, doubled, burst])))
+        times, rr = beats[1:], np.diff(beats)
+        good = good_beat_mask(times, rr)
+        self.assertTrue(good[times < 600].all())
+        self.assertFalse(good[(times >= 600) & (times < 900)].any())
+        self.assertTrue(good[times >= 900].all())
 
 
 if __name__ == "__main__":
