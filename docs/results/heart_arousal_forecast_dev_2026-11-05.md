@@ -1,6 +1,6 @@
 # Heart-only arousal forecasting: dev-slice result (2026-11-05)
 
-Status: **dev slice, negative after controls**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features add essentially nothing for 5-120 s arousal forecasting. Results 1-4 are kept as the path to that conclusion.
+Status: **dev slice, mostly negative after controls**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features add essentially nothing for 2-120 s arousal forecasting, and a tiny transferable amount at 1 s (Result 6). Results 1-4 are kept as the path to that conclusion.
 
 ## Setup
 - Anchor every 5 s during sleep with 60 s of quiet before it (no arousal, respiratory event, limb movement, or wake). Inputs end at the anchor. The stage score of the epoch containing the anchor is never used.
@@ -67,10 +67,22 @@ Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift:
 
 2 of 20 cells clear zero, both within MESA, and none transfer. With 20 cells, about 1 false positive is expected at this CI width. Call it null on the dev slice.
 
+## Result 6: beat-level 1-5 s warning
+`scripts/run_beat_warning.py`, `artifacts/beat_warning_dev25/report.json`. 1 s anchor grid (about 245k anchors per cohort), last 5 RR intervals relative to the prior minute, half-night shift control. Aligned beat bits (prior+beats vs prior+beats_shift):
+
+| horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
+|---|---|---|---|---|
+| 1 s | +0.0002 | **+0.0005 [+0.0001, +0.0009]** | **+0.0004 [+0.0001, +0.0007]** | **+0.0004 [+0.0001, +0.0007]** |
+| 2 s | -0.0000 | +0.0005 | -0.0001 | +0.0003 |
+| 3 s | **+0.0007 [+0.0001, +0.0015]** | -0.0001 | -0.0004 | +0.0002 |
+| 5 s | +0.0006 | +0.0007 | -0.0002 | +0.0005 |
+
+At 1 s the effect transfers in both directions, which matches the event-locked curve (HR rises only in the last second or two). But it is about 1% of the label entropy (base rate 0.3 to 0.4%), so it is real-looking and tiny. Part of it may be scorer timing: a scorer marks onset from EEG, and the HR rise may already be the arousal starting.
+
 ## What this changes
 - Every future comparison must include the shift control. Without it, any per-person feature looks predictive.
 - Normalization still matters for EEG transfer (Result 3 vs Result 4), but it does not create cardiac signal.
-- Minutes-ahead heart forecasting is weak at best. The sharper question is **beat-level, 0 to 5 s lead**: does the pre-onset HR rise give a usable 1 to 3 s warning? That is still useful for closed-loop stimulation (#96), where you only need to suppress the next click.
+- Heart-only forecasting at 2-120 s is null on the dev slice. At 1 s there is a small, transferable signal (Result 6), too weak to trigger anything alone. For #96 the useful heart input is probably a veto on the next click, scored by how many pre-arousal clicks it removes per click lost, not by bits.
 - The prior-context baseline is strong and must be the reference in every comparison. Arousals cluster, and a model can lean on that.
-- Next: (1) sub-5 s horizons with beat-resolved features (last 3 to 5 RR intervals, no interpolation), (2) full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
+- Next: full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
 - SHHS 200002 and MESA 0010 show median HR over 110 bpm late in the night, but those hours are scored wake (MESA PPG is flat there too, so the sensors were off). Anchors never fall in wake. `good_beat_mask` now drops such 5-min blocks anyway; it touches 0.02-0.03% of sleep beats.
