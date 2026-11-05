@@ -41,6 +41,7 @@ def anchor_labels(
     *,
     total_s: float,
     horizons: tuple[int, ...] = HORIZONS_S,
+    step_s: float = STEP_S,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(anchor_times, labels)`` with labels shaped ``(n_anchors, len(horizons))``."""
     stages = sleep_stage_epochs(events)
@@ -52,7 +53,7 @@ def anchor_labels(
     onsets = np.asarray([a.onset for a in arousals])
     spontaneous = np.asarray([a.kind == "spontaneous" for a in arousals])
 
-    t = np.arange(QUIET_S + EPOCH_S, total_s - max(horizons), STEP_S)
+    t = np.arange(QUIET_S + EPOCH_S, total_s - max(horizons), step_s)
     # Stage of the last completed epoch: the stage run that contains t - EPOCH_S.
     i = np.searchsorted(stage_start, t - EPOCH_S, side="right") - 1
     in_run = (i >= 0) & (t - EPOCH_S < stage_end[np.clip(i, 0, None)])
@@ -78,6 +79,25 @@ CARDIAC_WINDOWS_S = (10.0, 60.0)
 CARDIAC_NAMES = tuple(
     f"{name}_{int(w)}s" for w in CARDIAC_WINDOWS_S for name in ("hr", "rmssd", "sdnn", "hr_slope", "n_beats")
 ) + ("hr_ratio_10_60",)
+
+LAST_BEATS = 5
+BEAT_NAMES = tuple(f"rr_last{i}_rel" for i in range(1, LAST_BEATS + 1)) + ("since_last_beat_s",)
+
+
+def beat_features(beat_times: np.ndarray, rr: np.ndarray, anchors: np.ndarray, *, baseline_s: float = 60.0) -> np.ndarray:
+    """The last LAST_BEATS RR intervals closed at or before t, each divided by the
+    median RR of the preceding ``baseline_s``, plus time since the last beat.
+    No interpolation, so nothing after t leaks in. Ratios below 1 mean speeding up."""
+    out = np.full((anchors.size, len(BEAT_NAMES)), np.nan, dtype=np.float32)
+    hi = np.searchsorted(beat_times, anchors, side="right")
+    lo = np.searchsorted(beat_times, anchors - baseline_s, side="right")
+    for i in range(anchors.size):
+        if hi[i] - lo[i] < LAST_BEATS + 3:
+            continue
+        base = np.median(rr[lo[i] : hi[i]])
+        out[i, :LAST_BEATS] = rr[hi[i] - LAST_BEATS : hi[i]][::-1] / base
+        out[i, -1] = anchors[i] - beat_times[hi[i] - 1]
+    return out
 
 
 def cardiac_features(beat_times: np.ndarray, rr: np.ndarray, anchors: np.ndarray) -> np.ndarray:

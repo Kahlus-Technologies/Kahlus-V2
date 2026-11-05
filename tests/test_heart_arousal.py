@@ -5,10 +5,12 @@ import unittest
 import numpy as np
 
 from neurotwin.forecastability.heart_arousal import (
+    BEAT_NAMES,
     CARDIAC_NAMES,
     EEG_NAMES,
     PRIOR_NAMES,
     anchor_labels,
+    beat_features,
     cardiac_features,
     eeg_features,
     prior_features,
@@ -63,6 +65,18 @@ class FeatureTests(unittest.TestCase):
         fast = np.concatenate([beats[beats <= 100], 100 + np.cumsum(np.full(100, 0.4))])
         g = cardiac_features(fast[1:], np.diff(fast), anchors)[0]
         np.testing.assert_allclose(f, g)
+
+    def test_beat_features_are_relative_and_causal(self) -> None:
+        beats = np.arange(0.0, 100.0, 1.0)
+        beats = np.concatenate([beats, 99 + np.cumsum([0.8, 0.8])])  # two faster beats end at 100.6
+        times, rr = beats[1:], np.diff(beats)
+        f = dict(zip(BEAT_NAMES, beat_features(times, rr, np.array([100.7]))[0]))
+        self.assertAlmostEqual(f["rr_last1_rel"], 0.8, places=5)
+        self.assertAlmostEqual(f["rr_last3_rel"], 1.0, places=5)
+        self.assertAlmostEqual(f["since_last_beat_s"], 0.1, places=5)
+        later = np.concatenate([beats, [101.0, 101.2]])
+        g = beat_features(later[1:], np.diff(later), np.array([100.7]))[0]
+        np.testing.assert_allclose(list(f.values()), g)
 
     def test_cardiac_dropout_is_nan(self) -> None:
         f = cardiac_features(np.array([1.0, 2.0]), np.array([1.0, 1.0]), np.array([100.0]))
