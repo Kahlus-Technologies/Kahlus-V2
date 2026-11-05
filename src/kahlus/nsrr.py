@@ -128,20 +128,7 @@ def classify_arousals(events: list[tuple[str, float, float]]) -> list[Arousal]:
 
 def parse_nsrr_arousal_events(xml_path: str | Path) -> list[tuple[float, float]]:
     """Return list of (start_sec, duration_sec) for arousal events."""
-    tree = ET.parse(xml_path)
-    events: list[tuple[float, float]] = []
-    for elem in tree.iter():
-        if elem.tag not in {"ScoredEvent", "Event"}:
-            continue
-        concept = _child_text(elem, ("EventConcept", "EventType", "Name"))
-        if concept is None or not AROUSAL_CONCEPT_RE.search(concept):
-            continue
-        start = _child_float(elem, ("Start", "StartTime"))
-        duration = _child_float(elem, ("Duration", "DurationSec"))
-        if start is None or duration is None:
-            continue
-        events.append((float(start), float(duration)))
-    return events
+    return [(s, d) for c, s, d in parse_nsrr_events(xml_path) if AROUSAL_CONCEPT_RE.search(c)]
 
 
 def epoch_arousal_mask(
@@ -223,21 +210,3 @@ def load_nsrr_epoch_matrix(
         "channels": picked,
         "epochs": epochs,
     }
-
-
-def _child_text(elem: ET.Element, tags: tuple[str, ...]) -> str | None:
-    for tag in tags:
-        child = elem.find(tag)
-        if child is not None and child.text:
-            return child.text.strip()
-    return None
-
-
-def _child_float(elem: ET.Element, tags: tuple[str, ...]) -> float | None:
-    text = _child_text(elem, tags)
-    if text is None:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
