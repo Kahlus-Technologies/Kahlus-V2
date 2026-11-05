@@ -1,0 +1,921 @@
+{
+  "horizons_s": [
+    5,
+    15,
+    30,
+    60,
+    120
+  ],
+  "normalize": "causal",
+  "nights": {
+    "mesa": 25,
+    "shhs": 25
+  },
+  "results": {
+    "h5": {
+      "mesa_cv": {
+        "n_windows": 48501,
+        "n_positive": 949,
+        "base_rate": 0.019566606874085072,
+        "prior": {
+          "auroc": 0.6808260240112493,
+          "auprc": 0.05014666472009616
+        },
+        "prior+cardiac": {
+          "auroc": 0.6920538744474243,
+          "auprc": 0.053967838696128125,
+          "vs_prior": {
+            "rfs_ci_low": 0.00018466263656187446,
+            "rfs_ci_high": 0.0014176459603703804,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0008268234439882805
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6836628053437279,
+          "auprc": 0.051327071076386135,
+          "vs_prior": {
+            "rfs_ci_low": -0.0006354454446056208,
+            "rfs_ci_high": 0.0006386802488267013,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": -7.891046593693487e-05
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6902474775105055,
+          "auprc": 0.05293251886566727,
+          "vs_prior": {
+            "rfs_ci_low": -0.00026990516353248,
+            "rfs_ci_high": 0.001369205173247859,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0005542386180481981
+          }
+        },
+        "prior+ppg": {
+          "auroc": 0.7069122133236516,
+          "auprc": 0.05438527193026009,
+          "vs_prior": {
+            "rfs_ci_low": 0.000586287235099663,
+            "rfs_ci_high": 0.00257274688220688,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0016032589537828003
+          }
+        }
+      },
+      "shhs_cv": {
+        "n_windows": 50229,
+        "n_positive": 798,
+        "base_rate": 0.015887236457026818,
+        "prior": {
+          "auroc": 0.6770680545104543,
+          "auprc": 0.02986252182254948
+        },
+        "prior+cardiac": {
+          "auroc": 0.6868246484593674,
+          "auprc": 0.03084939209424159,
+          "vs_prior": {
+            "rfs_ci_low": -0.00014484190167514196,
+            "rfs_ci_high": 0.0012572577663308331,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0005531833659876711
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6808498887768875,
+          "auprc": 0.029657060038796125,
+          "vs_prior": {
+            "rfs_ci_low": -0.00048695977096274717,
+            "rfs_ci_high": 0.0008149899190172703,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.00027045620725095444
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6893182638983004,
+          "auprc": 0.03077861376731144,
+          "vs_prior": {
+            "rfs_ci_low": -0.00024850428229629726,
+            "rfs_ci_high": 0.0014148376054939243,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0006745402624343277
+          }
+        }
+      },
+      "mesa_to_shhs": {
+        "n_windows": 50229,
+        "n_positive": 798,
+        "base_rate": 0.015887236457026818,
+        "prior": {
+          "auroc": 0.6672033759217488,
+          "auprc": 0.031311711147221866
+        },
+        "prior+cardiac": {
+          "auroc": 0.688688883504304,
+          "auprc": 0.032645044638145944,
+          "vs_prior": {
+            "rfs_ci_low": 0.0003738209231007429,
+            "rfs_ci_high": 0.0027320929769904974,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0015841598573829378
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6835538047035413,
+          "auprc": 0.03433083495880236,
+          "vs_prior": {
+            "rfs_ci_low": 0.0011165081562559106,
+            "rfs_ci_high": 0.002848854734752058,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.002042272995366124
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6929804533992828,
+          "auprc": 0.03368716535735803,
+          "vs_prior": {
+            "rfs_ci_low": 0.0012773101873153588,
+            "rfs_ci_high": 0.0031278219564022103,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0022730303992761756
+          }
+        }
+      },
+      "shhs_to_mesa": {
+        "n_windows": 48501,
+        "n_positive": 949,
+        "base_rate": 0.019566606874085072,
+        "prior": {
+          "auroc": 0.6703095239445928,
+          "auprc": 0.03825589685589692
+        },
+        "prior+cardiac": {
+          "auroc": 0.6809720568119448,
+          "auprc": 0.03508015107390414,
+          "vs_prior": {
+            "rfs_ci_low": -0.0007716810323664378,
+            "rfs_ci_high": 0.0006257587550367028,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 4.189491945291782e-05
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6693855950231666,
+          "auprc": 0.03541477070743205,
+          "vs_prior": {
+            "rfs_ci_low": -0.0013202485472687193,
+            "rfs_ci_high": 0.00011596139946092686,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": -0.0005859575643473477
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6803711174332405,
+          "auprc": 0.03577380640338634,
+          "vs_prior": {
+            "rfs_ci_low": -0.0008970022821786051,
+            "rfs_ci_high": 0.0009226816398787747,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 5.553850514882709e-05
+          }
+        }
+      }
+    },
+    "h15": {
+      "mesa_cv": {
+        "n_windows": 48399,
+        "n_positive": 2575,
+        "base_rate": 0.05320357858633443,
+        "prior": {
+          "auroc": 0.6476195032407659,
+          "auprc": 0.10421297234179322
+        },
+        "prior+cardiac": {
+          "auroc": 0.6602182093073711,
+          "auprc": 0.11939697899665157,
+          "vs_prior": {
+            "rfs_ci_low": 0.0024435809352704096,
+            "rfs_ci_high": 0.01078132500411517,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.005436084574141576
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6576808481246949,
+          "auprc": 0.11356816218608573,
+          "vs_prior": {
+            "rfs_ci_low": 9.151682066915637e-08,
+            "rfs_ci_high": 0.007347441396715062,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0031947234895245273
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6628262461354884,
+          "auprc": 0.11939901133689826,
+          "vs_prior": {
+            "rfs_ci_low": 0.0028743432946190316,
+            "rfs_ci_high": 0.011126154234143018,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.005762600309817361
+          }
+        },
+        "prior+ppg": {
+          "auroc": 0.6706315298380974,
+          "auprc": 0.12059218535769568,
+          "vs_prior": {
+            "rfs_ci_low": 0.002590060955516088,
+            "rfs_ci_high": 0.011880552035410944,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.006527044747839541
+          }
+        }
+      },
+      "shhs_cv": {
+        "n_windows": 50150,
+        "n_positive": 2221,
+        "base_rate": 0.04428713858424726,
+        "prior": {
+          "auroc": 0.660786367468412,
+          "auprc": 0.07367842052648954
+        },
+        "prior+cardiac": {
+          "auroc": 0.661059471419665,
+          "auprc": 0.07340649150782508,
+          "vs_prior": {
+            "rfs_ci_low": -0.0013659744550465454,
+            "rfs_ci_high": 0.008639748025306447,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0034086952827633472
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6673588237306103,
+          "auprc": 0.07479302362319204,
+          "vs_prior": {
+            "rfs_ci_low": 0.00020837220614962695,
+            "rfs_ci_high": 0.009239962400233318,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.004610647038858155
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6663865907613289,
+          "auprc": 0.07417496025150994,
+          "vs_prior": {
+            "rfs_ci_low": 2.2384826828859714e-05,
+            "rfs_ci_high": 0.009638454683102624,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.004532147312637917
+          }
+        }
+      },
+      "mesa_to_shhs": {
+        "n_windows": 50150,
+        "n_positive": 2221,
+        "base_rate": 0.04428713858424726,
+        "prior": {
+          "auroc": 0.6569961952858211,
+          "auprc": 0.07994293435254865
+        },
+        "prior+cardiac": {
+          "auroc": 0.6731378252739502,
+          "auprc": 0.08359092376358462,
+          "vs_prior": {
+            "rfs_ci_low": -0.0015949905649767485,
+            "rfs_ci_high": 0.0058979678766541265,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.002219586751838502
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6698437202281864,
+          "auprc": 0.08424158779864047,
+          "vs_prior": {
+            "rfs_ci_low": 0.0010193624171283247,
+            "rfs_ci_high": 0.00518478808090833,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0030345066405461293
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6762868861188556,
+          "auprc": 0.0838577657312571,
+          "vs_prior": {
+            "rfs_ci_low": 0.00035651190056321775,
+            "rfs_ci_high": 0.00761684880936808,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.004052250052411529
+          }
+        }
+      },
+      "shhs_to_mesa": {
+        "n_windows": 48399,
+        "n_positive": 2575,
+        "base_rate": 0.05320357858633443,
+        "prior": {
+          "auroc": 0.6570825903753322,
+          "auprc": 0.0874658894621674
+        },
+        "prior+cardiac": {
+          "auroc": 0.6563444347643326,
+          "auprc": 0.08711534980555667,
+          "vs_prior": {
+            "rfs_ci_low": -0.002100259733795777,
+            "rfs_ci_high": 0.006669473655153155,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0018129463877120209
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6460456427631935,
+          "auprc": 0.08383050691627106,
+          "vs_prior": {
+            "rfs_ci_low": -0.006961899432624455,
+            "rfs_ci_high": 0.0055676382750969875,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": -0.0020106682378561386
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6620287965436351,
+          "auprc": 0.09002450289418454,
+          "vs_prior": {
+            "rfs_ci_low": -0.0012722359678940794,
+            "rfs_ci_high": 0.010900406926997263,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0036076506463167232
+          }
+        }
+      }
+    },
+    "h30": {
+      "mesa_cv": {
+        "n_windows": 48151,
+        "n_positive": 4645,
+        "base_rate": 0.09646736308695562,
+        "prior": {
+          "auroc": 0.6339369866309472,
+          "auprc": 0.1663920536837939
+        },
+        "prior+cardiac": {
+          "auroc": 0.6482344219178262,
+          "auprc": 0.18627916665433958,
+          "vs_prior": {
+            "rfs_ci_low": 0.0035830416761252386,
+            "rfs_ci_high": 0.020791251206519448,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.010929689247877223
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6528805276700633,
+          "auprc": 0.17893816837815096,
+          "vs_prior": {
+            "rfs_ci_low": 0.003032951645669419,
+            "rfs_ci_high": 0.014550473133990957,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.008570788882152472
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6588173973207462,
+          "auprc": 0.18981953951385153,
+          "vs_prior": {
+            "rfs_ci_low": 0.006293001966386431,
+            "rfs_ci_high": 0.024961821629720514,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.013775836881651767
+          }
+        },
+        "prior+ppg": {
+          "auroc": 0.6473561049966161,
+          "auprc": 0.17549708592983854,
+          "vs_prior": {
+            "rfs_ci_low": 0.00158194531795806,
+            "rfs_ci_high": 0.014430541878774551,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.007507618253977732
+          }
+        }
+      },
+      "shhs_cv": {
+        "n_windows": 49898,
+        "n_positive": 4078,
+        "base_rate": 0.08172672251392842,
+        "prior": {
+          "auroc": 0.6370103502221736,
+          "auprc": 0.12489036422179009
+        },
+        "prior+cardiac": {
+          "auroc": 0.6471843947005459,
+          "auprc": 0.12894543070439907,
+          "vs_prior": {
+            "rfs_ci_low": 0.0012115161649315833,
+            "rfs_ci_high": 0.014820097144683311,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.00817029338341987
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.665746669216965,
+          "auprc": 0.13840656167373266,
+          "vs_prior": {
+            "rfs_ci_low": 0.008757610920972932,
+            "rfs_ci_high": 0.018375885738169968,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.013941343895713169
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6585588552685744,
+          "auprc": 0.13464189585405842,
+          "vs_prior": {
+            "rfs_ci_low": 0.004411943569153447,
+            "rfs_ci_high": 0.020157199954709475,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.012291452216754066
+          }
+        }
+      },
+      "mesa_to_shhs": {
+        "n_windows": 49898,
+        "n_positive": 4078,
+        "base_rate": 0.08172672251392842,
+        "prior": {
+          "auroc": 0.6542303037088429,
+          "auprc": 0.1439425645563368
+        },
+        "prior+cardiac": {
+          "auroc": 0.6648870834741741,
+          "auprc": 0.144337222261686,
+          "vs_prior": {
+            "rfs_ci_low": -0.0024484129257999645,
+            "rfs_ci_high": 0.008052899008525113,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0027332271883421296
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6584884205825768,
+          "auprc": 0.1452107691437176,
+          "vs_prior": {
+            "rfs_ci_low": -0.0017029019175035505,
+            "rfs_ci_high": 0.005403126244246459,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0016947564900294575
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6699796943024381,
+          "auprc": 0.1478290596670354,
+          "vs_prior": {
+            "rfs_ci_low": -0.0006821039304455737,
+            "rfs_ci_high": 0.011005825835112391,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.005111576482654487
+          }
+        }
+      },
+      "shhs_to_mesa": {
+        "n_windows": 48151,
+        "n_positive": 4645,
+        "base_rate": 0.09646736308695562,
+        "prior": {
+          "auroc": 0.6388066241509714,
+          "auprc": 0.1438419067599181
+        },
+        "prior+cardiac": {
+          "auroc": 0.6482201284536333,
+          "auprc": 0.14558966707854287,
+          "vs_prior": {
+            "rfs_ci_low": 0.0010404621835839298,
+            "rfs_ci_high": 0.01481153860772871,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.007212077059286981
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6406241802659935,
+          "auprc": 0.14463099442261923,
+          "vs_prior": {
+            "rfs_ci_low": -0.0016486235652741175,
+            "rfs_ci_high": 0.011573779492876995,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.004098737917861414
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6509907990865444,
+          "auprc": 0.14739099848353676,
+          "vs_prior": {
+            "rfs_ci_low": 0.003895795838737026,
+            "rfs_ci_high": 0.018506900123306202,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.009478335676633896
+          }
+        }
+      }
+    },
+    "h60": {
+      "mesa_cv": {
+        "n_windows": 47577,
+        "n_positive": 8114,
+        "base_rate": 0.17054459087374152,
+        "prior": {
+          "auroc": 0.6203307455960829,
+          "auprc": 0.2602766025699568
+        },
+        "prior+cardiac": {
+          "auroc": 0.6255936199205165,
+          "auprc": 0.26861864700219484,
+          "vs_prior": {
+            "rfs_ci_low": -0.004062630511399865,
+            "rfs_ci_high": 0.026223881356486064,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0120702849092854
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6214149491680556,
+          "auprc": 0.26702382658389995,
+          "vs_prior": {
+            "rfs_ci_low": 0.0035408856904351337,
+            "rfs_ci_high": 0.018618617702015505,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.009333835378003573
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6318387952044714,
+          "auprc": 0.2707744154346363,
+          "vs_prior": {
+            "rfs_ci_low": 0.0038989032621700214,
+            "rfs_ci_high": 0.033463735096450106,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.016250658506988848
+          }
+        },
+        "prior+ppg": {
+          "auroc": 0.6302068418631042,
+          "auprc": 0.26681916849260634,
+          "vs_prior": {
+            "rfs_ci_low": 0.0008520354755637192,
+            "rfs_ci_high": 0.038891547527655716,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.01516197597610264
+          }
+        }
+      },
+      "shhs_cv": {
+        "n_windows": 49309,
+        "n_positive": 7268,
+        "base_rate": 0.14739702691192277,
+        "prior": {
+          "auroc": 0.6261093620548653,
+          "auprc": 0.2127327056977932
+        },
+        "prior+cardiac": {
+          "auroc": 0.6368292499589303,
+          "auprc": 0.21745437306815982,
+          "vs_prior": {
+            "rfs_ci_low": 0.0019416885177558337,
+            "rfs_ci_high": 0.016653351512015628,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.00876737617969068
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6422499532226691,
+          "auprc": 0.2223591627418394,
+          "vs_prior": {
+            "rfs_ci_low": 0.004974902553210712,
+            "rfs_ci_high": 0.01956626185646293,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.012171879716094793
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6388260149299703,
+          "auprc": 0.21706951429514781,
+          "vs_prior": {
+            "rfs_ci_low": 0.00133235517259583,
+            "rfs_ci_high": 0.018435369818331743,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.00994654319955781
+          }
+        }
+      },
+      "mesa_to_shhs": {
+        "n_windows": 49309,
+        "n_positive": 7268,
+        "base_rate": 0.14739702691192277,
+        "prior": {
+          "auroc": 0.6425960949984393,
+          "auprc": 0.2229069786758941
+        },
+        "prior+cardiac": {
+          "auroc": 0.6490267539888892,
+          "auprc": 0.23825943773477154,
+          "vs_prior": {
+            "rfs_ci_low": -0.002517732858206873,
+            "rfs_ci_high": 0.027139145262230182,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.011137610382947666
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6441743758225796,
+          "auprc": 0.22761221384238578,
+          "vs_prior": {
+            "rfs_ci_low": -0.00699782479652224,
+            "rfs_ci_high": 0.011802561285365082,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.002234507377748074
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6547257583167267,
+          "auprc": 0.23664496943287566,
+          "vs_prior": {
+            "rfs_ci_low": -0.0054007092435390935,
+            "rfs_ci_high": 0.02703848369040319,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.010527849010975275
+          }
+        }
+      },
+      "shhs_to_mesa": {
+        "n_windows": 47577,
+        "n_positive": 8114,
+        "base_rate": 0.17054459087374152,
+        "prior": {
+          "auroc": 0.6304874078202106,
+          "auprc": 0.23816441685438589
+        },
+        "prior+cardiac": {
+          "auroc": 0.6336676831246268,
+          "auprc": 0.24484175710881653,
+          "vs_prior": {
+            "rfs_ci_low": -0.007158067927457691,
+            "rfs_ci_high": 0.013757791258916966,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.0033902967067205836
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6287697103768449,
+          "auprc": 0.24204695548591287,
+          "vs_prior": {
+            "rfs_ci_low": -0.001982625266574617,
+            "rfs_ci_high": 0.016271453645921412,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.006218886282341635
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6372775096626112,
+          "auprc": 0.2500869174590265,
+          "vs_prior": {
+            "rfs_ci_low": 0.0012081106032693775,
+            "rfs_ci_high": 0.020972873449751447,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.011040668693943595
+          }
+        }
+      }
+    },
+    "h120": {
+      "mesa_cv": {
+        "n_windows": 46836,
+        "n_positive": 13126,
+        "base_rate": 0.2802545050815612,
+        "prior": {
+          "auroc": 0.5867536495531321,
+          "auprc": 0.35303884762626153
+        },
+        "prior+cardiac": {
+          "auroc": 0.6060282290989467,
+          "auprc": 0.38052082877886095,
+          "vs_prior": {
+            "rfs_ci_low": 0.019779507680048485,
+            "rfs_ci_high": 0.053873786846329874,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.03460216209288476
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.5838998092693807,
+          "auprc": 0.3588726791939896,
+          "vs_prior": {
+            "rfs_ci_low": -0.002710054041090719,
+            "rfs_ci_high": 0.02966759546386279,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.01141304710684511
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.606880718850628,
+          "auprc": 0.37757088308933473,
+          "vs_prior": {
+            "rfs_ci_low": 0.016993171772585153,
+            "rfs_ci_high": 0.04932334541050444,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.030469033500427487
+          }
+        },
+        "prior+ppg": {
+          "auroc": 0.5873686311614608,
+          "auprc": 0.3594893872900273,
+          "vs_prior": {
+            "rfs_ci_low": -0.00026684954936866763,
+            "rfs_ci_high": 0.02701570774606608,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.01205499592690352
+          }
+        }
+      },
+      "shhs_cv": {
+        "n_windows": 48451,
+        "n_positive": 12121,
+        "base_rate": 0.25017027512332046,
+        "prior": {
+          "auroc": 0.6065027976346316,
+          "auprc": 0.3180911002318936
+        },
+        "prior+cardiac": {
+          "auroc": 0.6114391079052801,
+          "auprc": 0.32351152113175946,
+          "vs_prior": {
+            "rfs_ci_low": 0.003633230508156595,
+            "rfs_ci_high": 0.02113093285072594,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.012015533045720549
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6180047240422083,
+          "auprc": 0.32542933569484495,
+          "vs_prior": {
+            "rfs_ci_low": 0.006441912317576261,
+            "rfs_ci_high": 0.02877605420009632,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.01844657887741432
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6242736131656046,
+          "auprc": 0.333166478665554,
+          "vs_prior": {
+            "rfs_ci_low": 0.011847080580637265,
+            "rfs_ci_high": 0.03824164304764861,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.026194144953901443
+          }
+        }
+      },
+      "mesa_to_shhs": {
+        "n_windows": 48451,
+        "n_positive": 12121,
+        "base_rate": 0.25017027512332046,
+        "prior": {
+          "auroc": 0.6270731167399063,
+          "auprc": 0.3308264561470106
+        },
+        "prior+cardiac": {
+          "auroc": 0.6255399660451945,
+          "auprc": 0.34768376866734785,
+          "vs_prior": {
+            "rfs_ci_low": -0.013351271778635848,
+            "rfs_ci_high": 0.040706185624710095,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.015224764307957514
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6291072485386991,
+          "auprc": 0.3400407103174644,
+          "vs_prior": {
+            "rfs_ci_low": -0.005137654665395495,
+            "rfs_ci_high": 0.021388350952246723,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.008026684962095718
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6381231950254422,
+          "auprc": 0.3577384327526192,
+          "vs_prior": {
+            "rfs_ci_low": -0.008422324474925578,
+            "rfs_ci_high": 0.050496005915038826,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.021157222362739994
+          }
+        }
+      },
+      "shhs_to_mesa": {
+        "n_windows": 46836,
+        "n_positive": 13126,
+        "base_rate": 0.2802545050815612,
+        "prior": {
+          "auroc": 0.6057374278454772,
+          "auprc": 0.3506948101347894
+        },
+        "prior+cardiac": {
+          "auroc": 0.6031882799182584,
+          "auprc": 0.3517213141400244,
+          "vs_prior": {
+            "rfs_ci_low": -0.008812188902043766,
+            "rfs_ci_high": 0.03556088542619116,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.01037890878832761
+          }
+        },
+        "prior+eeg": {
+          "auroc": 0.6096592920235983,
+          "auprc": 0.3584732662804171,
+          "vs_prior": {
+            "rfs_ci_low": 0.005548187385462932,
+            "rfs_ci_high": 0.03868630996338517,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.019900589236175326
+          }
+        },
+        "prior+cardiac+eeg": {
+          "auroc": 0.6169306183415535,
+          "auprc": 0.3621429650537671,
+          "vs_prior": {
+            "rfs_ci_low": 0.005196805765439726,
+            "rfs_ci_high": 0.05142320417851544,
+            "bootstrap_mode": "smoke",
+            "bootstrap_samples": 300,
+            "rfs_bits": 0.02654722349673163
+          }
+        }
+      }
+    }
+  }
+}
