@@ -10,6 +10,8 @@ Status: **dev slice, unresolved after an independent review; result sign is not 
 - Code: `src/neurotwin/forecastability/heart_arousal.py`, `scripts/run_heart_arousal_benchmark.py`. Raw numbers: `artifacts/heart_arousal_dev25/report.json`.
 
 ## Result 1: cardiac features add nothing over prior context
+(Historical: zero-phase detector, before the review fixes. Current raw-unit numbers are in `artifacts/heart_arousal_dev25/report.json`; the conclusion is unchanged, 1/20 aligned cells above zero.)
+
 Residual bits of prior+cardiac over prior (subject-bootstrap 95% CI):
 
 | horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
@@ -36,6 +38,8 @@ The 95% CI first excludes zero 1 s before scored onset, which is inside the inte
 prior+EEG drops by 0.03 to 0.15 bits when trained on MESA and tested on SHHS (h=30 to 120 s), while it helps slightly within SHHS. Amplifier gain and montage differ between cohorts, so `eeg_log_power` is a cohort fingerprint. Use relative power only, or normalize per night, before any transfer claim.
 
 ## Result 4: per-night normalization changes the answer
+(Historical, pre-review detector. Current numbers: `artifacts/heart_arousal_dev25_nightz/report.json`, 5/20 aligned cells above zero.)
+
 Same run with cardiac/EEG/PPG features z-scored within each night (`--normalize night`, `artifacts/heart_arousal_dev25_nightz/report.json`). Cardiac bits over prior:
 
 | horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
@@ -84,7 +88,8 @@ After the review fixes (causal detector, so no beat can see past t) all 16 point
 ## What this changes
 - Every future comparison must include the shift control. Without it, any per-person feature looks predictive.
 - Normalization still matters for EEG transfer (Result 3 vs Result 4), but it does not create cardiac signal.
-- Heart-only forecasting at 2-120 s is null on the dev slice. At 1 s there is a small, transferable signal (Result 6), too weak to trigger anything alone. For #96 the useful heart input is probably a veto on the next click, scored by how many pre-arousal clicks it removes per click lost, not by bits.
+- Heart-only forecasting at 5-120 s is unresolved on the dev slice (Result 5: 5/20 cells above zero after the review fixes, mostly cross-cohort). At 1-5 s there is a small, consistent signal (Result 6), too weak to trigger anything alone. For #96 the useful heart input is probably a veto on the next click, scored by how many pre-arousal clicks it removes per click lost, not by bits.
 - The prior-context baseline is strong and must be the reference in every comparison. Arousals cluster, and a model can lean on that.
 - Next: full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
-- SHHS 200002 and MESA 0010 show median HR over 110 bpm late in the night, but those hours are scored wake (MESA PPG is flat there too, so the sensors were off). Anchors never fall in wake. `good_beat_mask` now drops such 5-min blocks anyway; it touches 0.02-0.03% of sleep beats.
+- SHHS 200002 and MESA 0010 show median HR over 110 bpm late in the night, but those hours are scored wake (MESA PPG is flat there too, so the sensors were off). Anchors never fall in wake. `good_beat_mask` drops such stretches (trailing 5-min median). With the causal detector it masks 0.34% of MESA and 0% of SHHS sleep beats (it was 0.02-0.03% with the old block mask).
+- Every forecasting pipeline uses `causal_beats` (forward-only QRS detector, trailing quality mask), so no beat feature can see ECG after t + 60 ms. The earlier zero-phase detector looked up to ~4 s ahead; Results 1-4 above were computed with it and are kept as history.
