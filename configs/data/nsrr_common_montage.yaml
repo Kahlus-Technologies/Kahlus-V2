@@ -1,0 +1,16 @@
+# Shared MESA <-> SHHS1 channel map for dataset-held-out runs (#84, #90).
+# Verified from EDF headers of 25 recordings per dataset (2026-11-04).
+target_fs_hz: 125          # SHHS EEG/ECG native rate; MESA (256 Hz) is downsampled.
+channels:
+  eeg_c4:  {mesa: EEG3, shhs: EEG}        # C4-M1 / C4-A1
+  ecg:     {mesa: EKG,  shhs: ECG}
+  eog_l:   {mesa: EOG-L, shhs: "EOG(L)"}  # SHHS 50 Hz, upsample
+  eog_r:   {mesa: EOG-R, shhs: "EOG(R)"}
+  emg:     {mesa: EMG,  shhs: EMG}
+  thor:    {mesa: Thor, shhs: "THOR RES"} # 32 Hz vs 10 Hz
+  abdo:    {mesa: Abdo, shhs: "ABDO RES"}
+  spo2:    {mesa: SpO2, shhs: SaO2}       # 1 Hz
+mesa_only: [Pleth, EEG1, EEG2, Flow, Pres, Therm, Leg]  # PPG has no SHHS counterpart
+notes:
+  - SHHS has no PPG, so autonomic features for the SHHS transfer must come from ECG (RR intervals).
+  - SHHS has no leg channel, so limb-related arousals cannot be excluded there (census limb=0).

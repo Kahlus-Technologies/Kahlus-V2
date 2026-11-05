@@ -18,5 +18,25 @@
       "LIMB_GAP_S": 0.5,
       "CLEAN_PRE_S": 60.0
     }
+  },
+  "shhs": {
+    "total": 744043,
+    "respiratory": 300591,
+    "limb": 0,
+    "spontaneous": 443452,
+    "clean_spontaneous": 144533,
+    "n_subjects": 5792,
+    "frac_spontaneous": 0.596,
+    "clean_per_subject_median": 23.0,
+    "clean_per_subject_iqr": [
+      14.0,
+      34.0
+    ],
+    "subjects_with_ge10_clean": 4910,
+    "params": {
+      "RESP_GAP_S": 5.0,
+      "LIMB_GAP_S": 0.5,
+      "CLEAN_PRE_S": 60.0
+    }
   }
 }
