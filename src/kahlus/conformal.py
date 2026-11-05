@@ -30,6 +30,8 @@ def miss_rate_threshold(cal_pos_scores: np.ndarray, alpha: float) -> float:
 
 def alarm_metrics(scores: np.ndarray, y: np.ndarray, threshold: float, *, step_s: float) -> dict:
     """Miss rate on positives and false alarms per hour of anchors."""
+    if y.size == 0:
+        raise ValueError("alarm_metrics needs at least one anchor")
     alarm = scores >= threshold
     pos = y == 1
     hours = y.size * step_s / 3600.0

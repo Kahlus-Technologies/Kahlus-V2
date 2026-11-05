@@ -29,6 +29,10 @@ class ConformalTests(unittest.TestCase):
         self.assertEqual(m["miss_rate"], 0.5)
         self.assertEqual(m["false_alarms_per_hour"], 1.0)
 
+    def test_alarm_metrics_rejects_empty(self) -> None:
+        with self.assertRaises(ValueError):
+            alarm_metrics(np.array([]), np.array([]), 0.5, step_s=5.0)
+
 
 if __name__ == "__main__":
     unittest.main()
