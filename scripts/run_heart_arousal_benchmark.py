@@ -46,7 +46,20 @@ MODELS = {
 }
 
 
-def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None) -> dict:
+SIGNAL_BLOCKS = ("cardiac", "eeg", "ppg")  # per-night z-scored; "prior" is already in shared units
+
+
+def per_night_z(x: np.ndarray) -> np.ndarray:
+    """Z-score each column within one night so amplifier gain and resting HR stop
+    acting as cohort fingerprints. Uses the whole night, i.e. a small amount of
+    within-night look-ahead in the normalizer; that is the same for every model
+    being compared, so it cannot favor one block over another."""
+    mu = np.nanmean(x, axis=0)
+    sd = np.nanstd(x, axis=0)
+    return (x - mu) / np.where(sd > 0, sd, 1.0)
+
+
+def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: bool) -> dict:
     recs = discover_nsrr_recordings(root, dataset=name)[:max_nights]
     cache.mkdir(parents=True, exist_ok=True)
     nights = []
@@ -61,10 +74,11 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None) -> d
             np.savez(f, anchors=r["anchors"], labels=r["labels"], **{f"x_{k}": v for k, v in r["blocks"].items()})
         nights.append((rec.subject_id, np.load(f)))
     blocks = {k[2:] for _, z in nights for k in z.files if k.startswith("x_")}
+    prep = lambda b, v: per_night_z(v) if normalize and b in SIGNAL_BLOCKS else v  # noqa: E731
     return {
         "subject": np.concatenate([np.full(z["anchors"].size, i) for i, (_, z) in enumerate(nights)]),
         "labels": np.concatenate([z["labels"] for _, z in nights]),
-        "x": {b: np.concatenate([z[f"x_{b}"] for _, z in nights]) for b in blocks},
+        "x": {b: np.concatenate([prep(b, z[f"x_{b}"]) for _, z in nights]) for b in blocks},
         "n_nights": len(nights),
     }
 
@@ -131,13 +145,15 @@ def main() -> int:
     ap.add_argument("--max-nights", type=int, default=None)
     ap.add_argument("--bootstrap", choices=("smoke", "claim"), default="smoke")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--per-night-z", action="store_true", help="z-score cardiac/EEG/PPG features within each night")
+    ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache); raw features, safe to share across runs")
     a = ap.parse_args()
-    cache = a.out / "cache"
+    cache = a.cache or a.out / "cache"
     data = {
-        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights),
-        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights),
+        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.per_night_z),
+        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.per_night_z),
     }
-    report = {"horizons_s": list(HORIZONS_S), "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
+    report = {"horizons_s": list(HORIZONS_S), "per_night_z": a.per_night_z, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
     for k, h in enumerate(HORIZONS_S):
         r = report["results"][f"h{h}"] = {}
         for c in ("mesa", "shhs"):
