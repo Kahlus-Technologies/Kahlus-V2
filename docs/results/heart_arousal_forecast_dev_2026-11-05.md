@@ -1,6 +1,6 @@
 # Heart-only arousal forecasting: dev-slice result (2026-11-05)
 
-Status: **dev slice, mostly negative after controls**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features add essentially nothing for 2-120 s arousal forecasting, and a tiny transferable amount at 1 s (Result 6). Results 1-4 are kept as the path to that conclusion.
+Status: **dev slice, mostly negative after controls, reproduced from a fresh clone**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features add essentially nothing for 2-120 s arousal forecasting, and a tiny transferable amount at 1 s (Result 6). Results 1-4 are kept as the path to that conclusion.
 
 ## Setup
 - Anchor every 5 s during sleep with 60 s of quiet before it (no arousal, respiratory event, limb movement, or wake). Inputs end at the anchor. The stage score of the epoch containing the anchor is never used.
@@ -55,17 +55,19 @@ Two more runs (`artifacts/heart_arousal_dev25_causal/report.json`):
 - **Causal normalizer:** z-score each anchor against earlier anchors in the same night only (5 min warmup). This removes the whole-night look-ahead in Result 4. Cardiac bits over prior grew: 20/20 cells non-negative, 10 with CI > 0.
 - **Shift control:** the same cardiac features rotated by half a night inside each night (`prior+cardiac_shift`). They keep each person's distribution, drift and dropout pattern but lose alignment with the labels. This control *also* gained bits over prior, so the Result 4 gains were mostly the model recognizing the person (and their arousal rate), not reading a precursor.
 
-Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift:
+Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift (regenerated 2026-11-05 from a fresh clone, after the beat quality mask):
 
 | horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
 |---|---|---|---|---|
-| 5 s | +0.0005 [-0.0005, +0.0016] | +0.0005 [-0.0001, +0.0012] | -0.0003 | +0.0007 |
-| 15 s | +0.0017 | +0.0006 | -0.0010 | -0.0036 [-0.0073, -0.0006] |
-| 30 s | **+0.0051 [+0.0010, +0.0096]** | +0.0030 | -0.0016 | -0.0020 |
-| 60 s | +0.0053 | +0.0039 | -0.0009 | -0.0047 |
-| 120 s | **+0.0168 [+0.0004, +0.0407]** | +0.0026 | +0.0036 | -0.0006 |
+| 5 s | +0.0005 [-0.0006, +0.0018] | +0.0005 [-0.0002, +0.0012] | -0.0005 [-0.0014, +0.0004] | +0.0007 [-0.0004, +0.0017] |
+| 15 s | +0.0008 [-0.0018, +0.0038] | +0.0001 [-0.0048, +0.0039] | +0.0001 [-0.0024, +0.0028] | -0.0026 [-0.0058, +0.0006] |
+| 30 s | +0.0043 [-0.0002, +0.0091] | +0.0039 [-0.0026, +0.0106] | -0.0021 [-0.0054, +0.0009] | -0.0014 [-0.0069, +0.0045] |
+| 60 s | +0.0041 [-0.0063, +0.0133] | +0.0008 [-0.0075, +0.0082] | -0.0028 [-0.0090, +0.0033] | -0.0023 [-0.0182, +0.0113] |
+| 120 s | +0.0138 [-0.0055, +0.0357] | +0.0048 [-0.0092, +0.0168] | +0.0025 [-0.0092, +0.0132] | +0.0045 [-0.0099, +0.0237] |
 
-2 of 20 cells clear zero, both within MESA, and none transfer. With 20 cells, about 1 false positive is expected at this CI width. Call it null on the dev slice.
+0 of 20 cells have a CI that excludes zero. Before the quality mask, 2 MESA cells cleared zero; dropping implausible-HR blocks removed even those, so they were not robust. Call it null on the dev slice.
+
+The same regeneration (`scripts/repro_dev_slice.sh`) reproduced the census, beat-level, CLAS, montage and event-locked HR artifacts exactly. The raw and whole-night z runs (Results 1 and 4 tables above) predate the quality mask; their regenerated reports are in the same artifact paths and move individual cells but not the conclusions.
 
 ## Result 6: beat-level 1-5 s warning
 `scripts/run_beat_warning.py`, `artifacts/beat_warning_dev25/report.json`. 1 s anchor grid (about 245k anchors per cohort), last 5 RR intervals relative to the prior minute, half-night shift control. Aligned beat bits (prior+beats vs prior+beats_shift):
