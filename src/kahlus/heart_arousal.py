@@ -131,7 +131,8 @@ def cardiac_features(beat_times: np.ndarray, rr: np.ndarray, anchors: np.ndarray
             out[i, col + 4] = seg.size
         mean_hr[w] = out[:, col]
         col += 5
-    out[:, col] = mean_hr[10.0] / mean_hr[60.0]
+    short, long = CARDIAC_WINDOWS_S
+    out[:, col] = mean_hr[short] / mean_hr[long]
     return out
 
 
