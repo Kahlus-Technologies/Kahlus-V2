@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import sys
 import unittest
-from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from run_heart_arousal_benchmark import CAUSAL_WARMUP, causal_z  # noqa: E402
+from neurotwin.forecastability.heart_arousal import CAUSAL_WARMUP, causal_z, half_night_shift
 
 
 class CausalZTests(unittest.TestCase):
@@ -31,6 +28,12 @@ class CausalZTests(unittest.TestCase):
         self.assertTrue(np.isnan(z[:CAUSAL_WARMUP]).all())
         self.assertTrue(np.isnan(z[150, 1]))
         self.assertFalse(np.isnan(z[151, 1]))
+
+
+class HalfNightShiftTests(unittest.TestCase):
+    def test_is_a_pure_time_permutation(self) -> None:
+        x = np.arange(10.0)[:, None]
+        np.testing.assert_array_equal(half_night_shift(x)[:, 0], [5, 6, 7, 8, 9, 0, 1, 2, 3, 4])
 
 
 if __name__ == "__main__":

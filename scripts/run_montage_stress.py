@@ -16,14 +16,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
-from sklearn.ensemble import HistGradientBoostingClassifier
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_heart_arousal_benchmark import COHORTS, causal_z  # noqa: E402
 
 from neurotwin.adapters.nsrr import (
     SLEEP_STAGES,
@@ -33,7 +29,7 @@ from neurotwin.adapters.nsrr import (
     parse_nsrr_events,
     sleep_stage_epochs,
 )
-from neurotwin.forecastability.heart_arousal import eeg_features
+from neurotwin.forecastability.heart_arousal import COHORTS, causal_z, eeg_features, make_model
 from neurotwin.forecastability.montage_degrade import LEVELS, degrade, detected_onsets, match_events
 
 TOL_S = 3.0
@@ -95,8 +91,7 @@ def main() -> int:
         tr = clean[src]
         x, y = np.concatenate([n["x"] for n in tr]), np.concatenate([n["y"] for n in tr])
         ok = ~np.isnan(x).all(axis=1)
-        clf = HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=0)
-        clf.fit(x[ok], y[ok])
+        clf = make_model(0).fit(x[ok], y[ok])
         p_tr = [clf.predict_proba(n["x"])[:, 1] for n in tr]
         thr = max(np.linspace(0.05, 0.9, 18), key=lambda th: score_nights(tr, p_tr, th)["f1"])
         rows = {"threshold": float(thr), "train_f1": score_nights(tr, p_tr, thr)["f1"]}

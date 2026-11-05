@@ -18,13 +18,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_heart_arousal_benchmark import COHORTS, fit_predict  # noqa: E402
 
 from neurotwin.adapters.nsrr import (
     classify_arousals,
@@ -35,7 +32,15 @@ from neurotwin.adapters.nsrr import (
 )
 from neurotwin.adapters.qrs_fast import causal_beats
 from neurotwin.forecastability.clas_replay import clicks_before_arousal, so_clicks
-from neurotwin.forecastability.heart_arousal import EPOCH_S, anchor_labels, beat_features, prior_features
+from neurotwin.forecastability.heart_arousal import (
+    COHORTS,
+    EPOCH_S,
+    anchor_labels,
+    beat_features,
+    fit_predict,
+    half_night_shift,
+    prior_features,
+)
 
 WINDOW_S = 3.0
 VETO_FRACTIONS = (0.1, 0.2, 0.3)
@@ -86,13 +91,12 @@ def columns(x: np.ndarray, x_shift: np.ndarray, veto: str) -> np.ndarray:
 
 
 def replay(test: list[dict], train: list[dict], seed: int) -> dict:
-    shift = lambda a: np.roll(a, a.shape[0] // 2, axis=0)  # noqa: E731
     xtr = np.concatenate([n["x_train"] for n in train])
-    xtr_s = np.concatenate([shift(n["x_train"]) for n in train])
+    xtr_s = np.concatenate([half_night_shift(n["x_train"]) for n in train])
     ytr = np.concatenate([n["y_train"] for n in train])
     keep = ytr >= 0
     xc = np.concatenate([n["x_click"] for n in test])
-    xc_s = np.concatenate([shift(n["x_click"]) for n in test])
+    xc_s = np.concatenate([half_night_shift(n["x_click"]) for n in test])
     bad = np.concatenate([n["bad"] for n in test])
     rng = np.random.default_rng(seed)
     out = {"clicks": int(bad.size), "bad_clicks": int(bad.sum()), "bad_rate": float(bad.mean())}

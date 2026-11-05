@@ -10,17 +10,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_heart_arousal_benchmark import COHORTS, fit_predict  # noqa: E402
 
 from neurotwin.adapters.nsrr import discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events
 from neurotwin.adapters.qrs_fast import causal_beats
-from neurotwin.forecastability.heart_arousal import anchor_labels, beat_features, prior_features
+from neurotwin.forecastability.heart_arousal import COHORTS, anchor_labels, beat_features, fit_predict, half_night_shift, prior_features
 from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
 
 HORIZONS = (1, 2, 3, 5)
@@ -35,7 +32,7 @@ def night(rec, cohort: str) -> dict:
     t, y = anchor_labels(events, total_s=ecg.size / fs, horizons=HORIZONS, step_s=STEP)
     bt, rr = causal_beats(ecg, fs)
     beats = beat_features(bt, rr, t)
-    return {"y": y, "prior": prior_features(events, t), "beats": beats, "beats_shift": np.roll(beats, beats.shape[0] // 2, axis=0)}
+    return {"y": y, "prior": prior_features(events, t), "beats": beats, "beats_shift": half_night_shift(beats)}
 
 
 def load(cohort: str, root: Path, cache: Path) -> dict:

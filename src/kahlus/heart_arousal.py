@@ -209,3 +209,49 @@ def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labe
         pt, pp = causal_beats(flat["ppg"], fs)
         blocks["ppg"] = cardiac_features(pt, pp, anchors)
     return {"anchors": anchors, "labels": labels, "blocks": blocks, "n_beats": int(rr.size)}
+
+
+# Shared by every forecasting script (benchmark, beat warning, conformal, CLAS, montage).
+
+#: EDF channel labels per NSRR cohort. C4 EEG is the derivation both cohorts share.
+COHORTS = {
+    "mesa": {"ecg_labels": ("EKG",), "eeg_labels": ("EEG3",), "ppg_labels": ("Pleth",)},
+    "shhs": {"ecg_labels": ("ECG",), "eeg_labels": ("EEG",), "ppg_labels": ()},
+}
+
+CAUSAL_WARMUP = 60  # anchors (5 min at 5 s spacing) before running stats are trusted
+
+
+def causal_z(x: np.ndarray) -> np.ndarray:
+    """Z-score each row against the mean and SD of earlier rows in the same night
+    only (expanding window, NaN-aware). Rows before CAUSAL_WARMUP become NaN.
+    Anchors are time-ordered, so row i never sees row i or later."""
+    ok = ~np.isnan(x)
+    v = np.where(ok, x, 0.0).astype(np.float64)
+    n = np.cumsum(ok, axis=0) - ok  # count of earlier non-NaN rows
+    s1 = np.cumsum(v, axis=0) - v
+    s2 = np.cumsum(v * v, axis=0) - v * v
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mu = s1 / n
+        sd = np.sqrt(np.maximum(s2 / n - mu * mu, 0.0))
+        z = (x - mu) / np.where(sd > 0, sd, np.nan)
+    z[n < CAUSAL_WARMUP] = np.nan
+    return z.astype(np.float32)
+
+
+def half_night_shift(x: np.ndarray) -> np.ndarray:
+    """Falsification control: rotate one night's rows by half its length. Keeps the
+    night's own values, drift and missingness but breaks alignment with labels."""
+    return np.roll(x, x.shape[0] // 2, axis=0)
+
+
+def make_model(seed: int):
+    """The one model used across all forecasting comparisons; NaN-tolerant."""
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
+    # ponytail: one fixed gradient-boosting config; a tuned or sequence model is the upgrade path.
+    return HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=seed)
+
+
+def fit_predict(x_tr: np.ndarray, y_tr: np.ndarray, x_te: np.ndarray, seed: int) -> np.ndarray:
+    return make_model(seed).fit(x_tr, y_tr).predict_proba(x_te)[:, 1]

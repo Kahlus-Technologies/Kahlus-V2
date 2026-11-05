@@ -25,18 +25,20 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import GroupKFold
 
 from neurotwin.adapters.nsrr import discover_nsrr_recordings
-from neurotwin.forecastability.heart_arousal import HORIZONS_S, build_recording
+from neurotwin.forecastability.heart_arousal import (
+    COHORTS,
+    HORIZONS_S,
+    build_recording,
+    causal_z,
+    fit_predict,
+    half_night_shift,
+)
 from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
 
-COHORTS = {
-    "mesa": {"ecg_labels": ("EKG",), "eeg_labels": ("EEG3",), "ppg_labels": ("Pleth",)},
-    "shhs": {"ecg_labels": ("ECG",), "eeg_labels": ("EEG",), "ppg_labels": ()},
-}
 MODELS = {
     "prior": ("prior",),
     "prior+cardiac": ("prior", "cardiac"),
@@ -73,26 +75,6 @@ def per_night_z(x: np.ndarray) -> np.ndarray:
     return (x - mu) / np.where(sd > 0, sd, 1.0)
 
 
-CAUSAL_WARMUP = 60  # anchors (5 min at 5 s spacing) before running stats are trusted
-
-
-def causal_z(x: np.ndarray) -> np.ndarray:
-    """Z-score each row against the mean and SD of earlier rows in the same night
-    only (expanding window, NaN-aware). Rows before CAUSAL_WARMUP become NaN.
-    Anchors are time-ordered, so row i never sees row i or later."""
-    ok = ~np.isnan(x)
-    v = np.where(ok, x, 0.0).astype(np.float64)
-    n = np.cumsum(ok, axis=0) - ok  # count of earlier non-NaN rows
-    s1 = np.cumsum(v, axis=0) - v
-    s2 = np.cumsum(v * v, axis=0) - v * v
-    with np.errstate(invalid="ignore", divide="ignore"):
-        mu = s1 / n
-        sd = np.sqrt(np.maximum(s2 / n - mu * mu, 0.0))
-        z = (x - mu) / np.where(sd > 0, sd, np.nan)
-    z[n < CAUSAL_WARMUP] = np.nan
-    return z.astype(np.float32)
-
-
 NORMALIZERS = {"none": lambda x: x, "night": per_night_z, "causal": causal_z}
 
 
@@ -117,7 +99,7 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
         out = {b: norm(z[f"x_{b}"]) if b in SIGNAL_BLOCKS else z[f"x_{b}"] for b in blocks}
         # Roll the *normalized* block so the control is a like-for-like twin of the
         # aligned one (same values, same NaN warmup count), only misaligned in time.
-        out["cardiac_shift"] = np.roll(out["cardiac"], out["cardiac"].shape[0] // 2, axis=0)
+        out["cardiac_shift"] = half_night_shift(out["cardiac"])
         return out
 
     per_night = [night_blocks(z) for _, z in nights]
@@ -127,13 +109,6 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
         "x": {b: np.concatenate([n[b] for n in per_night]) for b in per_night[0]},
         "n_nights": len(nights),
     }
-
-
-def fit_predict(x_tr, y_tr, x_te, seed: int) -> np.ndarray:
-    # ponytail: one fixed gradient-boosting config; a tuned or sequence model is the upgrade path.
-    clf = HistGradientBoostingClassifier(max_iter=200, learning_rate=0.05, max_leaf_nodes=15, l2_regularization=1.0, random_state=seed)
-    clf.fit(x_tr, y_tr)
-    return clf.predict_proba(x_te)[:, 1]
 
 
 def design(data: dict, blocks: tuple[str, ...]) -> np.ndarray | None:

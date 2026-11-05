@@ -18,10 +18,10 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_heart_arousal_benchmark import MODELS, causal_z, design, fit_predict  # noqa: E402
+from run_heart_arousal_benchmark import MODELS, design  # noqa: E402
 
 from neurotwin.forecastability.conformal import alarm_metrics, miss_rate_threshold
-from neurotwin.forecastability.heart_arousal import HORIZONS_S, STEP_S
+from neurotwin.forecastability.heart_arousal import HORIZONS_S, STEP_S, causal_z, fit_predict
 
 ALPHAS = (0.1, 0.2, 0.3, 0.5)
 
