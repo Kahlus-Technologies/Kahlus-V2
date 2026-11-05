@@ -41,6 +41,12 @@ class AnchorLabelTests(unittest.TestCase):
         self.assertFalse(np.any((t >= 1000) & (t < 1060)))
         self.assertIn(1065.0, t.tolist())
 
+    def test_no_anchor_during_ongoing_event(self) -> None:
+        events = NIGHT + [("Obstructive apnea", 100, 300)]  # 100-400 s
+        t, _ = anchor_labels(events, total_s=3000, horizons=(5,))
+        self.assertFalse(np.any((t >= 100) & (t < 460)))  # in the apnea or < 60 s after it ends
+        self.assertIn(460.0, t.tolist())
+
     def test_unscored_night_has_no_anchors(self) -> None:
         t, y = anchor_labels([("Arousal", 100, 5)], total_s=3000, horizons=(5,))
         self.assertEqual((t.size, y.shape), (0, (0, 1)))

@@ -23,17 +23,19 @@ QUIET_S = 60.0
 EPOCH_S = 30.0
 
 
-def _disturbance_times(events: list[tuple[str, float, float]]) -> np.ndarray:
-    """When each disturbance becomes knowable: event onset, except a scored Wake
-    run, which is only known once its first 30 s epoch is over. NSRR merges
-    consecutive same-stage epochs into one event, so Wake events can be long."""
-    times = []
-    for concept, start, _ in events:
+def _disturbance_intervals(events: list[tuple[str, float, float]]) -> tuple[np.ndarray, np.ndarray]:
+    """(start, end) of every disturbance, sorted by start. Arousal, respiratory and
+    limb events count for their whole scored duration. A Wake run counts from the
+    end of its first 30 s epoch (when it becomes knowable) to the end of the run;
+    NSRR merges consecutive same-stage epochs into one event."""
+    spans = []
+    for concept, start, dur in events:
         if concept == "Wake":
-            times.append(start + EPOCH_S)
+            spans.append((start + EPOCH_S, start + max(dur, EPOCH_S)))
         elif event_kind(concept) is not None:
-            times.append(start)
-    return np.sort(np.asarray(times, dtype=np.float64))
+            spans.append((start, start + dur))
+    spans.sort()
+    return np.asarray([s for s, _ in spans], dtype=np.float64), np.asarray([e for _, e in spans], dtype=np.float64)
 
 
 def anchor_labels(
@@ -50,7 +52,7 @@ def anchor_labels(
     stage_start = np.asarray([s for s, _, _ in stages])
     stage_end = np.asarray([e for _, e, _ in stages])
     stage_sleep = np.asarray([c in SLEEP_STAGES for _, _, c in stages])
-    disturb = _disturbance_times(events)
+    d_start, d_end = _disturbance_intervals(events)
     arousals = classify_arousals(events)
     onsets = np.asarray([a.onset for a in arousals])
     spontaneous = np.asarray([a.kind == "spontaneous" for a in arousals])
@@ -60,8 +62,11 @@ def anchor_labels(
     i = np.searchsorted(stage_start, t - EPOCH_S, side="right") - 1
     in_run = (i >= 0) & (t - EPOCH_S < stage_end[np.clip(i, 0, None)])
     asleep = in_run & stage_sleep[np.clip(i, 0, None)]
-    n_recent = np.searchsorted(disturb, t, side="right") - np.searchsorted(disturb, t - QUIET_S, side="left")
-    t = t[asleep & (n_recent == 0)]
+    # Quiet = no disturbance overlapping [t - QUIET_S, t]: among events started by t,
+    # the latest end must be at or before t - QUIET_S.
+    started = np.searchsorted(d_start, t, side="right")
+    latest_end = np.concatenate([[-np.inf], np.maximum.accumulate(d_end)])[started]
+    t = t[asleep & (latest_end <= t - QUIET_S)]
 
     labels = np.zeros((t.size, len(horizons)), dtype=np.int8)
     if onsets.size == 0:
