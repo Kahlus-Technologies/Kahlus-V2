@@ -9,20 +9,20 @@
       "random_mean": 33.245,
       "random_p95": 44.0,
       "prior": {
-        "bad_removed": 54,
-        "enrichment": 1.624304406677696
+        "bad_removed": 65,
+        "enrichment": 1.9551812302601896
       },
       "beats": {
-        "bad_removed": 27,
-        "enrichment": 0.812152203338848
+        "bad_removed": 39,
+        "enrichment": 1.1731087381561138
       },
       "prior+beats": {
-        "bad_removed": 40,
-        "enrichment": 1.203188449390886
+        "bad_removed": 53,
+        "enrichment": 1.5942246954429238
       },
       "prior+beats_shift": {
-        "bad_removed": 60,
-        "enrichment": 1.8047826740863289
+        "bad_removed": 64,
+        "enrichment": 1.9251015190254175
       }
     },
     "0.2": {
@@ -30,20 +30,20 @@
       "random_mean": 65.78,
       "random_p95": 77.0,
       "prior": {
-        "bad_removed": 112,
-        "enrichment": 1.7026451809060505
+        "bad_removed": 129,
+        "enrichment": 1.9610823958650045
       },
       "beats": {
-        "bad_removed": 93,
-        "enrichment": 1.413803587716631
+        "bad_removed": 72,
+        "enrichment": 1.0945576162967467
       },
       "prior+beats": {
-        "bad_removed": 114,
-        "enrichment": 1.7330495591365156
+        "bad_removed": 120,
+        "enrichment": 1.8242626938279112
       },
       "prior+beats_shift": {
-        "bad_removed": 114,
-        "enrichment": 1.7330495591365156
+        "bad_removed": 131,
+        "enrichment": 1.9914867740954698
       }
     },
     "0.3": {
@@ -51,20 +51,20 @@
       "random_mean": 98.25,
       "random_p95": 113.0,
       "prior": {
-        "bad_removed": 181,
-        "enrichment": 1.8422391857506362
+        "bad_removed": 168,
+        "enrichment": 1.7099236641221374
       },
       "beats": {
-        "bad_removed": 129,
-        "enrichment": 1.3129770992366412
+        "bad_removed": 121,
+        "enrichment": 1.2315521628498727
       },
       "prior+beats": {
-        "bad_removed": 177,
-        "enrichment": 1.8015267175572518
+        "bad_removed": 186,
+        "enrichment": 1.8931297709923665
       },
       "prior+beats_shift": {
-        "bad_removed": 178,
-        "enrichment": 1.811704834605598
+        "bad_removed": 173,
+        "enrichment": 1.7608142493638677
       }
     }
   },
@@ -77,20 +77,20 @@
       "random_mean": 37.375,
       "random_p95": 47.0,
       "prior": {
-        "bad_removed": 75,
-        "enrichment": 2.0066889632107023
+        "bad_removed": 66,
+        "enrichment": 1.765886287625418
       },
       "beats": {
-        "bad_removed": 64,
-        "enrichment": 1.7123745819397993
+        "bad_removed": 63,
+        "enrichment": 1.68561872909699
       },
       "prior+beats": {
-        "bad_removed": 74,
-        "enrichment": 1.979933110367893
+        "bad_removed": 81,
+        "enrichment": 2.1672240802675584
       },
       "prior+beats_shift": {
-        "bad_removed": 82,
-        "enrichment": 2.1939799331103678
+        "bad_removed": 68,
+        "enrichment": 1.8193979933110367
       }
     },
     "0.2": {
@@ -98,20 +98,20 @@
       "random_mean": 73.485,
       "random_p95": 87.04999999999998,
       "prior": {
-        "bad_removed": 141,
-        "enrichment": 1.918758930393958
+        "bad_removed": 134,
+        "enrichment": 1.823501394842485
       },
       "beats": {
-        "bad_removed": 115,
-        "enrichment": 1.5649452269170578
+        "bad_removed": 104,
+        "enrichment": 1.4152548139076002
       },
       "prior+beats": {
-        "bad_removed": 156,
-        "enrichment": 2.1228822208614004
+        "bad_removed": 160,
+        "enrichment": 2.1773150983193847
       },
       "prior+beats_shift": {
-        "bad_removed": 152,
-        "enrichment": 2.0684493434034157
+        "bad_removed": 134,
+        "enrichment": 1.823501394842485
       }
     },
     "0.3": {
@@ -119,20 +119,20 @@
       "random_mean": 110.405,
       "random_p95": 126.0,
       "prior": {
-        "bad_removed": 199,
-        "enrichment": 1.8024545989764955
+        "bad_removed": 185,
+        "enrichment": 1.6756487477922195
       },
       "beats": {
-        "bad_removed": 158,
-        "enrichment": 1.4310946062225443
+        "bad_removed": 142,
+        "enrichment": 1.2861736334405145
       },
       "prior+beats": {
-        "bad_removed": 218,
-        "enrichment": 1.974548254155156
+        "bad_removed": 222,
+        "enrichment": 2.0107784973506635
       },
       "prior+beats_shift": {
-        "bad_removed": 210,
-        "enrichment": 1.902087767764141
+        "bad_removed": 205,
+        "enrichment": 1.8567999637697568
       }
     }
   }
