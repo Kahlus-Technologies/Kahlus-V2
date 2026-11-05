@@ -100,6 +100,12 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(named[1]["since_last_arousal_s"], 200.0)
         self.assertEqual(named[1]["stage_n2"], 1.0)
 
+    def test_prior_stage_is_empty_in_scoring_gap(self) -> None:
+        events = [("Stage 2 sleep", 0, 100), ("Stage 2 sleep", 200, 100)]  # 100-200 unscored
+        f = prior_features(events, np.array([160.0, 250.0]))
+        self.assertEqual(f[0, PRIOR_NAMES.index("stage_n2")], 0.0)
+        self.assertEqual(f[1, PRIOR_NAMES.index("stage_n2")], 1.0)
+
     def test_eeg_band_and_causality(self) -> None:
         fs = 128.0
         t = np.arange(int(fs * 200)) / fs

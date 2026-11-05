@@ -154,7 +154,7 @@ def prior_features(events: list[tuple[str, float, float]], anchors: np.ndarray) 
     starts = np.asarray([s for s, _, _ in stages])
     idx = np.searchsorted(starts, anchors - EPOCH_S, side="right") - 1
     for i, j in enumerate(idx):
-        if j >= 0 and stages[j][2] in stage_cols:
+        if j >= 0 and anchors[i] - EPOCH_S < stages[j][1] and stages[j][2] in stage_cols:
             out[i, stage_cols[stages[j][2]]] = 1.0
     return out
 
