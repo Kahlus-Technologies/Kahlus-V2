@@ -17,7 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
-from PIL import Image, ImageFilter  # noqa: E402
+from PIL import Image  # noqa: E402
 from scipy.signal import butter, sosfiltfilt  # noqa: E402
 
 from neurotwin.adapters.nsrr import classify_arousals, discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events  # noqa: E402
@@ -71,10 +71,9 @@ def main() -> int:
     ax.axis("off")
 
     mark = Image.open(Path(__file__).resolve().parents[1] / "docs/assets/kahlus-wordmark-light.png")
-    # Original avatar pixels, enlarged by a whole-number factor (nearest neighbour
-    # then a 1-px box blur) so the letterforms are the source's, not a re-trace.
-    k = 3
-    big = mark.resize((mark.width * k, mark.height * k), Image.NEAREST).filter(ImageFilter.BoxBlur(k / 2))
+    # High-res wordmark (docs/assets/kahlus-wordmark-light.png), drawn at a fixed share of the width.
+    target_w = int(fig.bbox.width * 0.42)
+    big = mark.resize((target_w, round(mark.height * target_w / mark.width)), Image.LANCZOS)
     fig.figimage(np.asarray(big), xo=int((fig.bbox.width - big.width) / 2), yo=int(fig.bbox.height * 0.735), origin="upper")
     fig.text(0.5, 0.655, "SENSE  ·  UNDERSTAND  ·  RECOVER", color=DIM, ha="center", fontsize=11, family="monospace")
     a.out.parent.mkdir(parents=True, exist_ok=True)
