@@ -115,8 +115,9 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
 
     def night_blocks(z) -> dict[str, np.ndarray]:
         out = {b: norm(z[f"x_{b}"]) if b in SIGNAL_BLOCKS else z[f"x_{b}"] for b in blocks}
-        raw = z["x_cardiac"]
-        out["cardiac_shift"] = norm(np.roll(raw, raw.shape[0] // 2, axis=0))
+        # Roll the *normalized* block so the control is a like-for-like twin of the
+        # aligned one (same values, same NaN warmup count), only misaligned in time.
+        out["cardiac_shift"] = np.roll(out["cardiac"], out["cardiac"].shape[0] // 2, axis=0)
         return out
 
     per_night = [night_blocks(z) for _, z in nights]
