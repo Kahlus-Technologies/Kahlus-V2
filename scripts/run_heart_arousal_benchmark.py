@@ -59,7 +59,30 @@ def per_night_z(x: np.ndarray) -> np.ndarray:
     return (x - mu) / np.where(sd > 0, sd, 1.0)
 
 
-def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: bool) -> dict:
+CAUSAL_WARMUP = 60  # anchors (5 min at 5 s spacing) before running stats are trusted
+
+
+def causal_z(x: np.ndarray) -> np.ndarray:
+    """Z-score each row against the mean and SD of earlier rows in the same night
+    only (expanding window, NaN-aware). Rows before CAUSAL_WARMUP become NaN.
+    Anchors are time-ordered, so row i never sees row i or later."""
+    ok = ~np.isnan(x)
+    v = np.where(ok, x, 0.0).astype(np.float64)
+    n = np.cumsum(ok, axis=0) - ok  # count of earlier non-NaN rows
+    s1 = np.cumsum(v, axis=0) - v
+    s2 = np.cumsum(v * v, axis=0) - v * v
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mu = s1 / n
+        sd = np.sqrt(np.maximum(s2 / n - mu * mu, 0.0))
+        z = (x - mu) / np.where(sd > 0, sd, np.nan)
+    z[n < CAUSAL_WARMUP] = np.nan
+    return z.astype(np.float32)
+
+
+NORMALIZERS = {"none": lambda x: x, "night": per_night_z, "causal": causal_z}
+
+
+def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str) -> dict:
     recs = discover_nsrr_recordings(root, dataset=name)[:max_nights]
     cache.mkdir(parents=True, exist_ok=True)
     nights = []
@@ -74,7 +97,8 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
             np.savez(f, anchors=r["anchors"], labels=r["labels"], **{f"x_{k}": v for k, v in r["blocks"].items()})
         nights.append((rec.subject_id, np.load(f)))
     blocks = {k[2:] for _, z in nights for k in z.files if k.startswith("x_")}
-    prep = lambda b, v: per_night_z(v) if normalize and b in SIGNAL_BLOCKS else v  # noqa: E731
+    norm = NORMALIZERS[normalize]
+    prep = lambda b, v: norm(v) if b in SIGNAL_BLOCKS else v  # noqa: E731
     return {
         "subject": np.concatenate([np.full(z["anchors"].size, i) for i, (_, z) in enumerate(nights)]),
         "labels": np.concatenate([z["labels"] for _, z in nights]),
@@ -145,15 +169,16 @@ def main() -> int:
     ap.add_argument("--max-nights", type=int, default=None)
     ap.add_argument("--bootstrap", choices=("smoke", "claim"), default="smoke")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--per-night-z", action="store_true", help="z-score cardiac/EEG/PPG features within each night")
+    ap.add_argument("--normalize", choices=tuple(NORMALIZERS), default="none",
+                    help="cardiac/EEG/PPG features: raw, z-scored over the whole night, or causal expanding z-score")
     ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache); raw features, safe to share across runs")
     a = ap.parse_args()
     cache = a.cache or a.out / "cache"
     data = {
-        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.per_night_z),
-        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.per_night_z),
+        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize),
+        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize),
     }
-    report = {"horizons_s": list(HORIZONS_S), "per_night_z": a.per_night_z, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
+    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
     for k, h in enumerate(HORIZONS_S):
         r = report["results"][f"h{h}"] = {}
         for c in ("mesa", "shhs"):
