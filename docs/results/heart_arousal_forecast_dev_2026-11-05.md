@@ -73,4 +73,4 @@ Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift:
 - Minutes-ahead heart forecasting is weak at best. The sharper question is **beat-level, 0 to 5 s lead**: does the pre-onset HR rise give a usable 1 to 3 s warning? That is still useful for closed-loop stimulation (#96), where you only need to suppress the next click.
 - The prior-context baseline is strong and must be the reference in every comparison. Arousals cluster, and a model can lean on that.
 - Next: (1) sub-5 s horizons with beat-resolved features (last 3 to 5 RR intervals, no interpolation), (2) full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
-- One SHHS night (200002) has QRS double-counting from hour 4 on (median 156 bpm). Needs a per-night ECG quality gate.
+- SHHS 200002 and MESA 0010 show median HR over 110 bpm late in the night, but those hours are scored wake (MESA PPG is flat there too, so the sensors were off). Anchors never fall in wake. `good_beat_mask` now drops such 5-min blocks anyway; it touches 0.02-0.03% of sleep beats.
