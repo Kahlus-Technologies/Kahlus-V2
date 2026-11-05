@@ -82,7 +82,7 @@ def causal_z(x: np.ndarray) -> np.ndarray:
 NORMALIZERS = {"none": lambda x: x, "night": per_night_z, "causal": causal_z}
 
 
-def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str) -> dict:
+def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str, shift_null: bool = False) -> dict:
     recs = discover_nsrr_recordings(root, dataset=name)[:max_nights]
     cache.mkdir(parents=True, exist_ok=True)
     nights = []
@@ -98,7 +98,15 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
         nights.append((rec.subject_id, np.load(f)))
     blocks = {k[2:] for _, z in nights for k in z.files if k.startswith("x_")}
     norm = NORMALIZERS[normalize]
-    prep = lambda b, v: norm(v) if b in SIGNAL_BLOCKS else v  # noqa: E731
+
+    def prep(b: str, v: np.ndarray) -> np.ndarray:
+        if b not in SIGNAL_BLOCKS:
+            return v
+        if shift_null:
+            # Falsification control: rotate signal features by half the night so they
+            # keep their own autocorrelation and drift but lose alignment with labels.
+            v = np.roll(v, v.shape[0] // 2, axis=0)
+        return norm(v)
     return {
         "subject": np.concatenate([np.full(z["anchors"].size, i) for i, (_, z) in enumerate(nights)]),
         "labels": np.concatenate([z["labels"] for _, z in nights]),
@@ -172,13 +180,14 @@ def main() -> int:
     ap.add_argument("--normalize", choices=tuple(NORMALIZERS), default="none",
                     help="cardiac/EEG/PPG features: raw, z-scored over the whole night, or causal expanding z-score")
     ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache); raw features, safe to share across runs")
+    ap.add_argument("--shift-null", action="store_true", help="control: rotate signal features within each night by half its length")
     a = ap.parse_args()
     cache = a.cache or a.out / "cache"
     data = {
-        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize),
-        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize),
+        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize, a.shift_null),
+        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize, a.shift_null),
     }
-    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
+    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "shift_null": a.shift_null, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
     for k, h in enumerate(HORIZONS_S):
         r = report["results"][f"h{h}"] = {}
         for c in ("mesa", "shhs"):
