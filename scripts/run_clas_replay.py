@@ -33,7 +33,7 @@ from neurotwin.adapters.nsrr import (
     parse_nsrr_events,
     sleep_stage_epochs,
 )
-from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs, good_beat_mask
+from neurotwin.adapters.qrs_fast import causal_beats
 from neurotwin.forecastability.clas_replay import clicks_before_arousal, so_clicks
 from neurotwin.forecastability.heart_arousal import EPOCH_S, anchor_labels, beat_features, prior_features
 
@@ -61,12 +61,11 @@ def night(rec, cohort: str) -> dict:
     clicks = so_clicks(eeg_uv, fs, allowed)
     onsets = np.asarray(sorted(a.onset for a in classify_arousals(events) if a.kind == "spontaneous"))
     bad = clicks_before_arousal(clicks, onsets, WINDOW_S)
-    bt, rr = beat_intervals(detect_qrs(ecg, fs), fs)
-    g = good_beat_mask(bt, rr)
-    x = np.concatenate([prior_features(events, clicks), beat_features(bt[g], rr[g], clicks)], axis=1)
+    bt, rr = causal_beats(ecg, fs)
+    x = np.concatenate([prior_features(events, clicks), beat_features(bt, rr, clicks)], axis=1)
     # Training rows for the risk model: the standard no-lookahead anchors on a 1 s grid.
     t, y = anchor_labels(events, total_s=n_sec, horizons=(int(WINDOW_S),), step_s=1.0)
-    xt = np.concatenate([prior_features(events, t), beat_features(bt[g], rr[g], t)], axis=1)
+    xt = np.concatenate([prior_features(events, t), beat_features(bt, rr, t)], axis=1)
     return {"clicks": clicks, "bad": bad, "x_click": x, "x_train": xt, "y_train": y[:, 0]}
 
 

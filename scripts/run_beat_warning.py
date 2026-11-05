@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_heart_arousal_benchmark import COHORTS, fit_predict  # noqa: E402
 
 from neurotwin.adapters.nsrr import discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events
-from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs, good_beat_mask
+from neurotwin.adapters.qrs_fast import causal_beats
 from neurotwin.forecastability.heart_arousal import anchor_labels, beat_features, prior_features
 from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
 
@@ -33,9 +33,7 @@ def night(rec, cohort: str) -> dict:
     ecg = m["epochs"]["ecg"][:, :, 0].ravel()
     events = parse_nsrr_events(rec.xml_path)
     t, y = anchor_labels(events, total_s=ecg.size / fs, horizons=HORIZONS, step_s=STEP)
-    bt, rr = beat_intervals(detect_qrs(ecg, fs), fs)
-    good = good_beat_mask(bt, rr)
-    bt, rr = bt[good], rr[good]
+    bt, rr = causal_beats(ecg, fs)
     beats = beat_features(bt, rr, t)
     return {"y": y, "prior": prior_features(events, t), "beats": beats, "beats_shift": np.roll(beats, beats.shape[0] // 2, axis=0)}
 
