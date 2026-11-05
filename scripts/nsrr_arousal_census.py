@@ -15,58 +15,28 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # ParseError
 from pathlib import Path
 
 import numpy as np
 
-RESP_GAP_S = 5.0  # ponytail: fixed AASM-style window. Sensitivity sweep (3/5/10 s) is the upgrade path.
-LIMB_GAP_S = 0.5
-CLEAN_PRE_S = 60.0
-SLEEP_STAGES = {"Stage 1 sleep", "Stage 2 sleep", "Stage 3 sleep", "Stage 4 sleep", "REM sleep"}
-
-
-def parse(xml_path: Path) -> list[tuple[str, float, float]]:
-    out = []
-    for ev in ET.parse(xml_path).getroot().iter("ScoredEvent"):
-        concept = (ev.findtext("EventConcept") or "").split("|")[0].strip()
-        try:
-            out.append((concept, float(ev.findtext("Start")), float(ev.findtext("Duration"))))
-        except (TypeError, ValueError):
-            continue
-    return out
+from neurotwin.adapters.nsrr import (
+    CLEAN_PRE_S,
+    LIMB_GAP_S,
+    RESP_GAP_S,
+    SLEEP_STAGES,
+    classify_arousals,
+    parse_nsrr_events,
+    sleep_stage_epochs,
+)
 
 
 def classify(events: list[tuple[str, float, float]]) -> dict:
-    low = [(c.lower(), s, d) for c, s, d in events]
-    arousals = sorted(s for c, s, d in low if "arousal" in c)
-    resp = [(s, s + d) for c, s, d in low if "apnea" in c or "hypopnea" in c]
-    limb = [(s, s + d) for c, s, d in low if "limb" in c or "leg movement" in c]
-    stages = sorted((s, s + d, c) for c, s, d in events if c in SLEEP_STAGES or c == "Wake")
-
-    def stage_at(t: float) -> str | None:
-        for s, e, c in stages:
-            if s <= t < e:
-                return c
-        return None
-
-    counts = {"respiratory": 0, "limb": 0, "spontaneous": 0, "clean_spontaneous": 0}
-    disturb = sorted([s for s in arousals] + [s for s, _ in resp] + [s for s, _ in limb]
-                     + [s for s, e, c in stages if c == "Wake"])
-    for t in arousals:
-        if any(s <= t <= e + RESP_GAP_S for s, e in resp):
-            counts["respiratory"] += 1
-            continue
-        if any(s - LIMB_GAP_S <= t <= e + LIMB_GAP_S for s, e in limb):
-            counts["limb"] += 1
-            continue
-        counts["spontaneous"] += 1
-        stage = stage_at(t)
-        prior = [x for x in disturb if t - CLEAN_PRE_S <= x < t]
-        if stage in SLEEP_STAGES and not prior and stage_at(t - CLEAN_PRE_S) in SLEEP_STAGES:
-            counts["clean_spontaneous"] += 1
+    arousals = classify_arousals(events)
+    counts = {k: sum(a.kind == k for a in arousals) for k in ("respiratory", "limb", "spontaneous")}
+    counts["clean_spontaneous"] = sum(a.clean for a in arousals)
     counts["total"] = len(arousals)
-    tst_s = sum(e - s for s, e, c in stages if c in SLEEP_STAGES)
+    tst_s = sum(e - s for s, e, c in sleep_stage_epochs(events) if c in SLEEP_STAGES)
     counts["tst_h"] = round(tst_s / 3600, 3)
     return counts
 
@@ -97,7 +67,7 @@ def main() -> int:
         rows = []
         for x in sorted(d.glob("*-nsrr.xml")):
             try:
-                rows.append({"subject": x.stem.replace("-nsrr", ""), **classify(parse(x))})
+                rows.append({"subject": x.stem.replace("-nsrr", ""), **classify(parse_nsrr_events(x))})
             except ET.ParseError:
                 print(f"skip unparseable {x}", file=sys.stderr)
         report[d.name] = summarize(rows)
@@ -108,13 +78,5 @@ def main() -> int:
     return 0
 
 
-def _self_check() -> None:
-    ev = [("Stage 2 sleep", 0, 600), ("Hypopnea", 100, 20), ("Arousal", 122, 5),
-          ("Limb movement - left", 300, 2), ("Arousal", 300.2, 4), ("Arousal", 450, 5), ("Arousal", 470, 5)]
-    c = classify(ev)
-    assert (c["respiratory"], c["limb"], c["spontaneous"], c["clean_spontaneous"]) == (1, 1, 2, 1), c
-
-
 if __name__ == "__main__":
-    _self_check()
     raise SystemExit(main())

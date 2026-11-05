@@ -67,6 +67,65 @@ def _subject_id_from_stem(stem: str) -> str:
     return stem
 
 
+def parse_nsrr_events(xml_path: str | Path) -> list[tuple[str, float, float]]:
+    """All scored events as ``(concept, start_sec, duration_sec)``; concept is the text before ``|``."""
+    out: list[tuple[str, float, float]] = []
+    for ev in ET.parse(xml_path).getroot().iter("ScoredEvent"):
+        concept = (ev.findtext("EventConcept") or "").split("|")[0].strip()
+        try:
+            out.append((concept, float(ev.findtext("Start")), float(ev.findtext("Duration"))))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+@dataclass(frozen=True)
+class Arousal:
+    onset: float
+    kind: str  # "respiratory" | "limb" | "spontaneous"
+    clean: bool  # spontaneous, in sleep, nothing disturbing in the CLEAN_PRE_S before
+
+
+# NSRR rarely labels arousal subtype, so it is inferred from timing.
+RESP_GAP_S = 5.0  # ponytail: fixed window, sensitivity sweep (3/5/10 s) is the upgrade path
+LIMB_GAP_S = 0.5
+CLEAN_PRE_S = 60.0
+SLEEP_STAGES = ("Stage 1 sleep", "Stage 2 sleep", "Stage 3 sleep", "Stage 4 sleep", "REM sleep")
+
+
+def sleep_stage_epochs(events: list[tuple[str, float, float]]) -> list[tuple[float, float, str]]:
+    """Sorted ``(start, end, stage)`` for scored sleep stages and wake."""
+    return sorted((s, s + d, c) for c, s, d in events if c in SLEEP_STAGES or c == "Wake")
+
+
+def stage_at(stages: list[tuple[float, float, str]], t: float) -> str | None:
+    for s, e, c in stages:
+        if s <= t < e:
+            return c
+    return None
+
+
+def classify_arousals(events: list[tuple[str, float, float]]) -> list[Arousal]:
+    low = [(c.lower(), s, d) for c, s, d in events]
+    onsets = sorted(s for c, s, _ in low if "arousal" in c)
+    resp = [(s, s + d) for c, s, d in low if "apnea" in c or "hypopnea" in c]
+    limb = [(s, s + d) for c, s, d in low if "limb" in c or "leg movement" in c]
+    stages = sleep_stage_epochs(events)
+    disturb = onsets + [s for s, _ in resp] + [s for s, _ in limb] + [s for s, _, c in stages if c == "Wake"]
+
+    out: list[Arousal] = []
+    for t in onsets:
+        if any(s <= t <= e + RESP_GAP_S for s, e in resp):
+            out.append(Arousal(t, "respiratory", False))
+        elif any(s - LIMB_GAP_S <= t <= e + LIMB_GAP_S for s, e in limb):
+            out.append(Arousal(t, "limb", False))
+        else:
+            quiet = not any(t - CLEAN_PRE_S <= x < t for x in disturb)
+            asleep = stage_at(stages, t) in SLEEP_STAGES and stage_at(stages, t - CLEAN_PRE_S) in SLEEP_STAGES
+            out.append(Arousal(t, "spontaneous", quiet and asleep))
+    return out
+
+
 def parse_nsrr_arousal_events(xml_path: str | Path) -> list[tuple[float, float]]:
     """Return list of (start_sec, duration_sec) for arousal events."""
     tree = ET.parse(xml_path)

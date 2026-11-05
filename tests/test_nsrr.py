@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from neurotwin.adapters.nsrr import (
+    classify_arousals,
     discover_nsrr_recordings,
     epoch_arousal_mask,
     load_nsrr_epoch_matrix,
@@ -17,6 +18,29 @@ from neurotwin.forecastability.autonomic_rfs import (
     make_autonomic_fixture,
     run_autonomic_rfs_gate,
 )
+
+
+class NsrrArousalClassificationTests(unittest.TestCase):
+    def test_subtypes_and_clean_flag(self) -> None:
+        events = [
+            ("Stage 2 sleep", 0, 600),
+            ("Hypopnea", 100, 20),
+            ("Arousal", 122, 5),  # 2 s after hypopnea ends -> respiratory
+            ("Limb movement - left", 300, 2),
+            ("Arousal", 300.2, 4),  # during limb movement -> limb
+            ("Arousal", 450, 5),  # quiet for 60 s before -> clean spontaneous
+            ("Arousal", 470, 5),  # 20 s after another arousal -> spontaneous, not clean
+        ]
+        got = [(a.onset, a.kind, a.clean) for a in classify_arousals(events)]
+        self.assertEqual(
+            got,
+            [(122, "respiratory", False), (300.2, "limb", False), (450, "spontaneous", True), (470, "spontaneous", False)],
+        )
+
+    def test_arousal_near_sleep_onset_is_not_clean(self) -> None:
+        events = [("Wake", 0, 30), ("Stage 1 sleep", 30, 300), ("Arousal", 50, 5)]
+        (a,) = classify_arousals(events)
+        self.assertEqual((a.kind, a.clean), ("spontaneous", False))
 
 
 class NsrrAdapterTests(unittest.TestCase):
