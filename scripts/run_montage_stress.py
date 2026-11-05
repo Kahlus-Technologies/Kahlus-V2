@@ -51,7 +51,7 @@ def night_rows(eeg_uv: np.ndarray, fs: float, events, level: str, seed: int) -> 
     onsets = []
     for c, s, d in events:
         if event_kind(c) == "arousal":
-            inside[int(s) : min(int(s + d) + 1, n_sec)] = True
+            inside[int(s) : min(int(np.ceil(s + d)), n_sec)] = True  # second t is labeled if it starts inside [s, s+d)
             if int(s) < n_sec and asleep[int(s)]:
                 onsets.append(s)
     t = np.arange(int(WINDOW_S), n_sec, dtype=np.float64)
