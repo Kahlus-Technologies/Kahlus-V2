@@ -40,10 +40,24 @@ COHORTS = {
 MODELS = {
     "prior": ("prior",),
     "prior+cardiac": ("prior", "cardiac"),
+    "prior+cardiac_shift": ("prior", "cardiac_shift"),  # falsification control
     "prior+eeg": ("prior", "eeg"),
     "prior+cardiac+eeg": ("prior", "cardiac", "eeg"),
     "prior+ppg": ("prior", "ppg"),
 }
+# (model, reference) pairs scored as residual bits with a subject-clustered bootstrap.
+# cardiac vs cardiac_shift is the headline: the shifted block keeps each night's own
+# cardiac distribution, drift and dropout pattern (so it can still identify the
+# person and their arousal rate) but loses alignment with the labels. Only the
+# excess over it is time-locked cardiac information.
+COMPARISONS = (
+    ("prior+cardiac", "prior"),
+    ("prior+cardiac_shift", "prior"),
+    ("prior+cardiac", "prior+cardiac_shift"),
+    ("prior+eeg", "prior"),
+    ("prior+cardiac+eeg", "prior"),
+    ("prior+ppg", "prior"),
+)
 
 
 SIGNAL_BLOCKS = ("cardiac", "eeg", "ppg")  # per-night z-scored; "prior" is already in shared units
@@ -82,7 +96,7 @@ def causal_z(x: np.ndarray) -> np.ndarray:
 NORMALIZERS = {"none": lambda x: x, "night": per_night_z, "causal": causal_z}
 
 
-def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str, shift_null: bool = False) -> dict:
+def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str) -> dict:
     recs = discover_nsrr_recordings(root, dataset=name)[:max_nights]
     cache.mkdir(parents=True, exist_ok=True)
     nights = []
@@ -99,18 +113,17 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
     blocks = {k[2:] for _, z in nights for k in z.files if k.startswith("x_")}
     norm = NORMALIZERS[normalize]
 
-    def prep(b: str, v: np.ndarray) -> np.ndarray:
-        if b not in SIGNAL_BLOCKS:
-            return v
-        if shift_null:
-            # Falsification control: rotate signal features by half the night so they
-            # keep their own autocorrelation and drift but lose alignment with labels.
-            v = np.roll(v, v.shape[0] // 2, axis=0)
-        return norm(v)
+    def night_blocks(z) -> dict[str, np.ndarray]:
+        out = {b: norm(z[f"x_{b}"]) if b in SIGNAL_BLOCKS else z[f"x_{b}"] for b in blocks}
+        raw = z["x_cardiac"]
+        out["cardiac_shift"] = norm(np.roll(raw, raw.shape[0] // 2, axis=0))
+        return out
+
+    per_night = [night_blocks(z) for _, z in nights]
     return {
         "subject": np.concatenate([np.full(z["anchors"].size, i) for i, (_, z) in enumerate(nights)]),
         "labels": np.concatenate([z["labels"] for _, z in nights]),
-        "x": {b: np.concatenate([prep(b, z[f"x_{b}"]) for _, z in nights]) for b in blocks},
+        "x": {b: np.concatenate([n[b] for n in per_night]) for b in per_night[0]},
         "n_nights": len(nights),
     }
 
@@ -161,11 +174,11 @@ def score(run: dict, seed: int, bootstrap: str) -> dict:
     out = {"n_windows": int(y.size), "n_positive": int(y.sum()), "base_rate": float(y.mean())}
     for name, p in preds.items():
         out[name] = {"auroc": float(roc_auc_score(y, p)), "auprc": float(average_precision_score(y, p))}
-    for name in ("prior+cardiac", "prior+eeg", "prior+cardiac+eeg", "prior+ppg"):
-        if name in preds:
-            rfs = _cluster_bootstrap_rfs(y, preds["prior"], preds[name], subj, seed=seed, mode=bootstrap)
-            rfs["rfs_bits"] = _rfs_bits(y, preds["prior"], preds[name])
-            out[name]["vs_prior"] = rfs
+    for model, ref in COMPARISONS:
+        if model in preds and ref in preds:
+            rfs = _cluster_bootstrap_rfs(y, preds[ref], preds[model], subj, seed=seed, mode=bootstrap)
+            rfs["rfs_bits"] = _rfs_bits(y, preds[ref], preds[model])
+            out[f"{model} vs {ref}"] = rfs
     return out
 
 
@@ -180,22 +193,22 @@ def main() -> int:
     ap.add_argument("--normalize", choices=tuple(NORMALIZERS), default="none",
                     help="cardiac/EEG/PPG features: raw, z-scored over the whole night, or causal expanding z-score")
     ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache); raw features, safe to share across runs")
-    ap.add_argument("--shift-null", action="store_true", help="control: rotate signal features within each night by half its length")
     a = ap.parse_args()
     cache = a.cache or a.out / "cache"
     data = {
-        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize, a.shift_null),
-        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize, a.shift_null),
+        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize),
+        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize),
     }
-    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "shift_null": a.shift_null, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
+    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
     for k, h in enumerate(HORIZONS_S):
         r = report["results"][f"h{h}"] = {}
         for c in ("mesa", "shhs"):
             r[f"{c}_cv"] = score(within_cohort(data[c], k, a.seed), a.seed, a.bootstrap)
         r["mesa_to_shhs"] = score(transfer(data["mesa"], data["shhs"], k, a.seed), a.seed, a.bootstrap)
         r["shhs_to_mesa"] = score(transfer(data["shhs"], data["mesa"], k, a.seed), a.seed, a.bootstrap)
-        print(f"h={h:>3}s " + "  ".join(
-            f"{split}: card {v['prior+cardiac']['vs_prior']['rfs_bits']:+.4f} [{v['prior+cardiac']['vs_prior']['rfs_ci_low']:+.4f},{v['prior+cardiac']['vs_prior']['rfs_ci_high']:+.4f}]"
+        key = "prior+cardiac vs prior+cardiac_shift"
+        print(f"h={h:>3}s aligned-cardiac bits " + "  ".join(
+            f"{split}: {v[key]['rfs_bits']:+.4f} [{v[key]['rfs_ci_low']:+.4f},{v[key]['rfs_ci_high']:+.4f}]"
             for split, v in r.items()
         ))
     a.out.mkdir(parents=True, exist_ok=True)
