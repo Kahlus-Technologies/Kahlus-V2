@@ -1,6 +1,6 @@
 # Heart-only arousal forecasting: dev-slice result (2026-11-05)
 
-Status: **negative, dev slice, not a claim**. 25 MESA + 25 SHHS1 nights. Refs #83, #84.
+Status: **dev slice, not a claim**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Raw features: no cardiac signal. Per-night z-scored features: a small positive that sometimes clears zero (Result 4).
 
 ## Setup
 - Anchor every 5 s during sleep with 60 s of quiet before it (no arousal, respiratory event, limb movement, or wake). Inputs end at the anchor. The stage score of the epoch containing the anchor is never used.
@@ -35,8 +35,24 @@ The 95% CI first excludes zero 1 s before scored onset, which is inside the inte
 ## Result 3: absolute EEG power does not transfer
 prior+EEG drops by 0.03 to 0.15 bits when trained on MESA and tested on SHHS (h=30 to 120 s), while it helps slightly within SHHS. Amplifier gain and montage differ between cohorts, so `eeg_log_power` is a cohort fingerprint. Use relative power only, or normalize per night, before any transfer claim.
 
+## Result 4: per-night normalization changes the answer
+Same run with cardiac/EEG/PPG features z-scored within each night (`--per-night-z`, `artifacts/heart_arousal_dev25_nightz/report.json`). Cardiac bits over prior:
+
+| horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
+|---|---|---|---|---|
+| 5 s | +0.0001 | +0.0004 | **+0.0022 [+0.0011, +0.0035]** | +0.0002 |
+| 15 s | +0.0035 [-0.0001, +0.0096] | +0.0036 | +0.0016 | +0.0025 |
+| 30 s | +0.0027 | **+0.0103 [+0.0041, +0.0168]** | +0.0020 | +0.0072 |
+| 60 s | -0.0066 | +0.0084 | +0.0038 | +0.0049 |
+| 120 s | +0.0095 | +0.0123 | +0.0020 | **+0.0225 [+0.0039, +0.0442]** |
+
+EEG transfer also stops collapsing (MESA to SHHS at 120 s goes from -0.153 to +0.0035 bits). So most of Result 1 was a units problem: absolute HR and power differ by person and amplifier, and a raw-feature model learns the person. What the heart carries is *relative change within a night*. 19 of 20 cardiac cells are now positive, but only 3 have a CI that excludes zero, and 20 cells at 25+25 nights invite false positives. The full-cohort claim-mode run decides it.
+
+Caveat: the z-score uses the whole night's mean and SD, a mild within-night look-ahead. It is the same for every model compared. A causal running normalizer is needed before any deployment claim.
+
 ## What this changes
-- The "minutes-ahead heart forecasting" framing is likely dead. The honest question is now **beat-level, 0 to 5 s lead**: does the pre-onset HR rise give a usable 1 to 3 s warning? That is still useful for closed-loop stimulation (#96), where you only need to suppress the next click.
+- Per-night (or running) normalization is mandatory for every signal block. Raw-unit results in Result 1 and Result 3 are superseded.
+- Minutes-ahead heart forecasting is weak at best. The sharper question is **beat-level, 0 to 5 s lead**: does the pre-onset HR rise give a usable 1 to 3 s warning? That is still useful for closed-loop stimulation (#96), where you only need to suppress the next click.
 - The prior-context baseline is strong and must be the reference in every comparison. Arousals cluster, and a model can lean on that.
-- Next: (1) sub-5 s horizons with beat-resolved features (last 3 to 5 RR intervals, no interpolation), (2) per-night normalization of all features, (3) full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
+- Next: (1) sub-5 s horizons with beat-resolved features (last 3 to 5 RR intervals, no interpolation), (2) a causal running normalizer, (3) full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
 - One SHHS night (200002) has QRS double-counting from hour 4 on (median 156 bpm). Needs a per-night ECG quality gate.
