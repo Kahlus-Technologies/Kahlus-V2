@@ -41,6 +41,10 @@ class AnchorLabelTests(unittest.TestCase):
         self.assertFalse(np.any((t >= 1000) & (t < 1060)))
         self.assertIn(1065.0, t.tolist())
 
+    def test_unscored_night_has_no_anchors(self) -> None:
+        t, y = anchor_labels([("Arousal", 100, 5)], total_s=3000, horizons=(5,))
+        self.assertEqual((t.size, y.shape), (0, (0, 1)))
+
     def test_current_epoch_score_is_not_used(self) -> None:
         # Epoch 1500-1530 is scored Wake (the scorer saw the future). An anchor at
         # 1505 must still exist because the last completed epoch (1470-1500) was sleep.

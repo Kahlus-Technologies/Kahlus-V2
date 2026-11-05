@@ -45,6 +45,8 @@ def anchor_labels(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(anchor_times, labels)`` with labels shaped ``(n_anchors, len(horizons))``."""
     stages = sleep_stage_epochs(events)
+    if not stages:  # unscored night: no stage is ever known, so no anchor qualifies
+        return np.zeros(0), np.zeros((0, len(horizons)), dtype=np.int8)
     stage_start = np.asarray([s for s, _, _ in stages])
     stage_end = np.asarray([e for _, e, _ in stages])
     stage_sleep = np.asarray([c in SLEEP_STAGES for _, _, c in stages])
