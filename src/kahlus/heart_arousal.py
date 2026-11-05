@@ -159,7 +159,12 @@ def eeg_features(eeg: np.ndarray, fs: float, anchors: np.ndarray, *, window_s: f
 def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labels: tuple[str, ...], ppg_labels: tuple[str, ...] = ()) -> dict:
     """Anchors, labels and every feature block for one night."""
     from neurotwin.adapters.nsrr import load_nsrr_epoch_matrix, parse_nsrr_events
-    from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs
+    from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs, good_beat_mask
+
+    def clean_beats(signal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        times, rr = beat_intervals(detect_qrs(signal, fs), fs)
+        good = good_beat_mask(times, rr)
+        return times[good], rr[good]
 
     groups = {"ecg": ecg_labels, "eeg": eeg_labels}
     if ppg_labels:
@@ -169,7 +174,7 @@ def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labe
     flat = {g: m["epochs"][g][:, :, 0].ravel() for g in m["epochs"]}
     events = parse_nsrr_events(xml_path)
     anchors, labels = anchor_labels(events, total_s=flat["ecg"].size / fs)
-    beat_times, rr = beat_intervals(detect_qrs(flat["ecg"], fs), fs)
+    beat_times, rr = clean_beats(flat["ecg"])
     blocks = {
         "cardiac": cardiac_features(beat_times, rr, anchors),
         "prior": prior_features(events, anchors),
@@ -178,6 +183,6 @@ def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labe
     if "ppg" in flat:
         # ponytail: PPG treated as a pulse wave through the same peak detector; a
         # dedicated PPG beat detector (and pulse arrival time vs ECG) is the upgrade path.
-        pt, pp = beat_intervals(detect_qrs(flat["ppg"], fs), fs)
+        pt, pp = clean_beats(flat["ppg"])
         blocks["ppg"] = cardiac_features(pt, pp, anchors)
     return {"anchors": anchors, "labels": labels, "blocks": blocks, "n_beats": int(rr.size)}
