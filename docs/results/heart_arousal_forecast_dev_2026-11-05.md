@@ -1,6 +1,6 @@
 # Heart-only arousal forecasting: dev-slice result (2026-11-05)
 
-Status: **dev slice, not a claim**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Raw features: no cardiac signal. Per-night z-scored features: a small positive that sometimes clears zero (Result 4).
+Status: **dev slice, negative after controls**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features add essentially nothing for 5-120 s arousal forecasting. Results 1-4 are kept as the path to that conclusion.
 
 ## Setup
 - Anchor every 5 s during sleep with 60 s of quiet before it (no arousal, respiratory event, limb movement, or wake). Inputs end at the anchor. The stage score of the epoch containing the anchor is never used.
@@ -36,7 +36,7 @@ The 95% CI first excludes zero 1 s before scored onset, which is inside the inte
 prior+EEG drops by 0.03 to 0.15 bits when trained on MESA and tested on SHHS (h=30 to 120 s), while it helps slightly within SHHS. Amplifier gain and montage differ between cohorts, so `eeg_log_power` is a cohort fingerprint. Use relative power only, or normalize per night, before any transfer claim.
 
 ## Result 4: per-night normalization changes the answer
-Same run with cardiac/EEG/PPG features z-scored within each night (`--per-night-z`, `artifacts/heart_arousal_dev25_nightz/report.json`). Cardiac bits over prior:
+Same run with cardiac/EEG/PPG features z-scored within each night (`--normalize night`, `artifacts/heart_arousal_dev25_nightz/report.json`). Cardiac bits over prior:
 
 | horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
 |---|---|---|---|---|
@@ -50,9 +50,27 @@ EEG transfer also stops collapsing (MESA to SHHS at 120 s goes from -0.153 to +0
 
 Caveat: the z-score uses the whole night's mean and SD, a mild within-night look-ahead. It is the same for every model compared. A causal running normalizer is needed before any deployment claim.
 
+## Result 5: a shift control explains the Result 4 positives
+Two more runs (`artifacts/heart_arousal_dev25_causal/report.json`):
+- **Causal normalizer:** z-score each anchor against earlier anchors in the same night only (5 min warmup). This removes the whole-night look-ahead in Result 4. Cardiac bits over prior grew: 20/20 cells non-negative, 10 with CI > 0.
+- **Shift control:** the same cardiac features rotated by half a night inside each night (`prior+cardiac_shift`). They keep each person's distribution, drift and dropout pattern but lose alignment with the labels. This control *also* gained bits over prior, so the Result 4 gains were mostly the model recognizing the person (and their arousal rate), not reading a precursor.
+
+Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift:
+
+| horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
+|---|---|---|---|---|
+| 5 s | +0.0005 [-0.0005, +0.0016] | +0.0005 [-0.0001, +0.0012] | -0.0003 | +0.0007 |
+| 15 s | +0.0017 | +0.0006 | -0.0010 | -0.0036 [-0.0073, -0.0006] |
+| 30 s | **+0.0051 [+0.0010, +0.0096]** | +0.0030 | -0.0016 | -0.0020 |
+| 60 s | +0.0053 | +0.0039 | -0.0009 | -0.0047 |
+| 120 s | **+0.0168 [+0.0004, +0.0407]** | +0.0026 | +0.0036 | -0.0006 |
+
+2 of 20 cells clear zero, both within MESA, and none transfer. With 20 cells, about 1 false positive is expected at this CI width. Call it null on the dev slice.
+
 ## What this changes
-- Per-night (or running) normalization is mandatory for every signal block. Raw-unit results in Result 1 and Result 3 are superseded.
+- Every future comparison must include the shift control. Without it, any per-person feature looks predictive.
+- Normalization still matters for EEG transfer (Result 3 vs Result 4), but it does not create cardiac signal.
 - Minutes-ahead heart forecasting is weak at best. The sharper question is **beat-level, 0 to 5 s lead**: does the pre-onset HR rise give a usable 1 to 3 s warning? That is still useful for closed-loop stimulation (#96), where you only need to suppress the next click.
 - The prior-context baseline is strong and must be the reference in every comparison. Arousals cluster, and a model can lean on that.
-- Next: (1) sub-5 s horizons with beat-resolved features (last 3 to 5 RR intervals, no interpolation), (2) a causal running normalizer, (3) full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
+- Next: (1) sub-5 s horizons with beat-resolved features (last 3 to 5 RR intervals, no interpolation), (2) full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
 - One SHHS night (200002) has QRS double-counting from hour 4 on (median 156 bpm). Needs a per-night ECG quality gate.
