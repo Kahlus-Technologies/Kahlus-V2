@@ -60,6 +60,7 @@ def evaluate(train: dict, cal: dict, test: dict, blocks: tuple[str, ...], seed: 
             for s in np.unique(test["subject"])
             if ((test["subject"] == s) & (test["y"] == 1)).sum() >= 5
         ]
+        m["per_subject_miss"] = per
         m["per_subject_miss_p10_p90"] = [float(np.percentile(per, 10)), float(np.percentile(per, 90))] if per else None
         out[str(alpha)] = m
     return out
@@ -84,9 +85,14 @@ def main() -> int:
             n = len(subs)
             tr, ca, te = perm[: n // 2], perm[n // 2 : 3 * n // 4], perm[3 * n // 4 :]
             runs.append(evaluate(stack(subs, tr), stack(subs, ca), stack(subs, te), blocks, seed))
+        def pooled_spread(al: str) -> list[float] | None:
+            # Per-subject miss rates from every seed's test split, pooled.
+            per = [v for r in runs for v in r[al]["per_subject_miss"]]
+            return [float(np.percentile(per, 10)), float(np.percentile(per, 90))] if per else None
+
         report["within"][c] = {
             al: {m: float(np.mean([r[al][m] for r in runs])) for m in ("miss_rate", "false_alarms_per_hour")}
-            | {"per_subject_miss_p10_p90": runs[0][al]["per_subject_miss_p10_p90"]}
+            | {"per_subject_miss_p10_p90": pooled_spread(al)}
             for al in runs[0]
         }
     for src, dst in (("mesa", "shhs"), ("shhs", "mesa")):
