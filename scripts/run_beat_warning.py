@@ -54,7 +54,7 @@ def design(d: dict, model: str) -> np.ndarray:
     return np.concatenate([d[b] for b in model.split("+")], axis=1)
 
 
-def run(train: dict, test: dict | None, k: int, seed: int) -> dict:
+def run(train: dict, test: dict | None, k: int, seed: int, bootstrap: str) -> dict:
     """Subject-grouped 5-fold CV when test is None, otherwise train -> test transfer."""
     from sklearn.model_selection import GroupKFold
 
@@ -74,7 +74,7 @@ def run(train: dict, test: dict | None, k: int, seed: int) -> dict:
         preds = {m: fit_predict(design(train, m)[a], train["y"][a, k], design(test, m)[b], seed) for m in models}
     out = {"n": int(y.size), "pos": int(y.sum())}
     for m, ref in (("prior+beats", "prior"), ("prior+beats_shift", "prior"), ("prior+beats", "prior+beats_shift")):
-        r = _cluster_bootstrap_rfs(y, preds[ref], preds[m], subj, seed=seed, mode="smoke")
+        r = _cluster_bootstrap_rfs(y, preds[ref], preds[m], subj, seed=seed, mode=bootstrap)
         out[f"{m} vs {ref}"] = {"bits": _rfs_bits(y, preds[ref], preds[m]), "lo": r["rfs_ci_low"], "hi": r["rfs_ci_high"]}
     return out
 
@@ -85,15 +85,16 @@ def main() -> int:
     ap.add_argument("--shhs", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--bootstrap", choices=("smoke", "claim"), default="smoke", help="smoke: 300 resamples; claim: 2000")
     a = ap.parse_args()
     data = {c: load(c, getattr(a, c), a.out / "cache") for c in ("mesa", "shhs")}
     report = {}
     for k, h in enumerate(HORIZONS):
         r = report[f"h{h}"] = {
-            "mesa_cv": run(data["mesa"], None, k, a.seed),
-            "shhs_cv": run(data["shhs"], None, k, a.seed),
-            "mesa_to_shhs": run(data["mesa"], data["shhs"], k, a.seed),
-            "shhs_to_mesa": run(data["shhs"], data["mesa"], k, a.seed),
+            "mesa_cv": run(data["mesa"], None, k, a.seed, a.bootstrap),
+            "shhs_cv": run(data["shhs"], None, k, a.seed, a.bootstrap),
+            "mesa_to_shhs": run(data["mesa"], data["shhs"], k, a.seed, a.bootstrap),
+            "shhs_to_mesa": run(data["shhs"], data["mesa"], k, a.seed, a.bootstrap),
         }
         key = "prior+beats vs prior+beats_shift"
         print(f"h={h}s aligned-beat bits " + "  ".join(f"{s}: {v[key]['bits']:+.4f} [{v[key]['lo']:+.4f},{v[key]['hi']:+.4f}] pos={v['pos']}" for s, v in r.items()))
