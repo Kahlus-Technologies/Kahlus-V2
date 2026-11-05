@@ -187,16 +187,25 @@ QUALITY_WINDOW_S = 300.0
 
 
 def good_beat_mask(beat_times: np.ndarray, rr: np.ndarray) -> np.ndarray:
-    """False for intervals inside a ``QUALITY_WINDOW_S`` block whose median HR is
-    implausible for sleep. Block-wise, not per beat, so a real tachycardic burst
-    survives but an hour of double-counted beats does not."""
-    block = (beat_times // QUALITY_WINDOW_S).astype(np.int64)
+    """False for intervals where the median HR over the trailing
+    ``QUALITY_WINDOW_S`` (this beat and the ones before it) is implausible for
+    sleep. Trailing, so a beat's validity never depends on later beats; a short
+    tachycardic burst survives because the median is dominated by normal beats,
+    while minutes of double-counted beats do not."""
+    lo = np.searchsorted(beat_times, beat_times - QUALITY_WINDOW_S, side="left")
     good = np.ones(rr.size, dtype=bool)
-    for b in np.unique(block):
-        sel = block == b
-        if 60.0 / np.median(rr[sel]) > QUALITY_MAX_MEDIAN_BPM:
-            good[sel] = False
+    for i in range(rr.size):
+        if 60.0 / np.median(rr[lo[i] : i + 1]) > QUALITY_MAX_MEDIAN_BPM:
+            good[i] = False
     return good
+
+
+def causal_beats(signal: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+    """Beat times and RR intervals for forecasting features: causal detector,
+    physiologic intervals, trailing quality mask. Nothing here reads the future."""
+    times, rr = beat_intervals(detect_qrs(signal, fs, causal=True), fs)
+    good = good_beat_mask(times, rr)
+    return times[good], rr[good]
 
 
 def heart_rate_grid(

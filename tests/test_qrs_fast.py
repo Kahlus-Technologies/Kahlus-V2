@@ -64,17 +64,25 @@ class QrsTests(unittest.TestCase):
             self.assertTrue(0.0 <= lag < 0.2, lag)  # constant delay, never early
             np.testing.assert_allclose(np.median(np.diff(peaks)) / fs, 60 / 62, atol=0.01)
 
-    def test_good_beat_mask_drops_double_counted_block(self) -> None:
+    def test_good_beat_mask_drops_double_counted_stretch(self) -> None:
         normal = np.arange(0.0, 600.0, 1.0)  # 60 bpm for 10 min
-        doubled = np.arange(600.0, 900.0, 0.4)  # 150 bpm for 5 min
-        burst = np.arange(900.0, 1500.0, 1.0)
-        burst[100:110] = burst[100] + np.arange(10) * 0.45  # 10-beat tachy burst, keep
+        doubled = np.arange(600.0, 1200.0, 0.4)  # 150 bpm for 10 min
+        burst = np.arange(1200.0, 2400.0, 1.0)
+        burst[300:310] = burst[300] + np.arange(10) * 0.45  # 10-beat tachy burst, keep
         beats = np.sort(np.unique(np.concatenate([normal, doubled, burst])))
         times, rr = beats[1:], np.diff(beats)
         good = good_beat_mask(times, rr)
         self.assertTrue(good[times < 600].all())
-        self.assertFalse(good[(times >= 600) & (times < 900)].any())
-        self.assertTrue(good[times >= 900].all())
+        self.assertFalse(good[(times >= 900) & (times < 1200)].any())  # trailing median is high
+        self.assertTrue(good[times >= 1800].all())
+
+    def test_good_beat_mask_is_causal(self) -> None:
+        clean = np.arange(0.0, 400.0, 1.0)
+        bad_after = np.concatenate([clean, 400 + np.cumsum(np.full(500, 0.4))])
+        a = good_beat_mask(clean[1:], np.diff(clean))
+        b = good_beat_mask(bad_after[1:], np.diff(bad_after))[: a.size]
+        np.testing.assert_array_equal(a, b)
+        self.assertTrue(a.all())
 
 
 if __name__ == "__main__":
