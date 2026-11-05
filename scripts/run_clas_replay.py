@@ -7,7 +7,7 @@ then compare vetoes that drop the same fraction of clicks:
   beats    drop clicks whose beat-level risk (last 5 RR vs prior minute, prior
            context) is highest; model trained on the *other* cohort, so no
            subject or cohort overlap with the night being replayed
-  random   drop the same number of clicks at random (100 draws)
+  random   drop the same number of clicks at random (200 draws)
 
 Metric: bad clicks removed per click dropped, relative to random (enrichment).
 Enrichment 1.0 means the veto is no better than chance.
@@ -42,7 +42,7 @@ VETO_FRACTIONS = (0.1, 0.2, 0.3)
 DEEP = {"Stage 2 sleep", "Stage 3 sleep", "Stage 4 sleep"}
 N_PRIOR = 6  # prior_features columns, then beat_features columns
 # Which columns each veto model sees; "beats_shift" uses beat features rotated by half a night.
-VETOES = {"prior": "prior", "beats": "beats", "prior+beats": "prior+beats", "prior+beats_shift": "prior+beats_shift"}
+VETOES = ("prior", "beats", "prior+beats", "prior+beats_shift")
 
 
 def night(rec, cohort: str) -> dict:
