@@ -13,11 +13,14 @@ from typing import Any
 import numpy as np
 
 AROUSAL_CONCEPT_RE = re.compile(r"arousal", re.IGNORECASE)
-EEG_CHANNEL_CANDIDATES = ("EEG C3-A2", "EEG C4-A1", "EEG Fpz-Cz", "EEG C3", "EEG C4")
+# Real NSRR labels: MESA EEG3 = C4-M1 (EEG1 = Fz-Cz, EEG2 = Cz-Oz); SHHS1 "EEG" = C4-A1, "EEG(sec)" = C3-A2.
+# Order is priority: the C4 derivation shared across MESA and SHHS comes first.
+EEG_CHANNEL_CANDIDATES = ("EEG C4-A1", "EEG3", "EEG", "EEG C3-A2", "EEG(sec)", "EEG Fpz-Cz", "EEG C3", "EEG C4")
 ECG_CHANNEL_CANDIDATES = ("ECG", "EKG", "ECG1", "ECG2")
-EOG_CHANNEL_CANDIDATES = ("EOG E1-A2", "EOG E2-A1", "EOG", "EOG Left", "EOG Right")
+PPG_CHANNEL_CANDIDATES = ("Pleth", "PPG", "Plethysmogram")
+EOG_CHANNEL_CANDIDATES = ("EOG E1-A2", "EOG E2-A1", "EOG", "EOG Left", "EOG Right", "EOG-L", "EOG-R", "EOG(L)", "EOG(R)")
 EMG_CHANNEL_CANDIDATES = ("EMG Chin", "EMG", "Chin")
-RESP_CHANNEL_CANDIDATES = ("AIRFLOW", "New AIR", "Flow", "Nasal Pressure", "Chest", "Abdomen")
+RESP_CHANNEL_CANDIDATES = ("AIRFLOW", "New AIR", "Flow", "Nasal Pressure", "Chest", "Abdomen", "Thor", "Abdo", "THOR RES", "ABDO RES")
 
 
 @dataclass(frozen=True)
@@ -114,17 +117,14 @@ def load_nsrr_epoch_matrix(
     groups = channel_groups or {
         "eeg": EEG_CHANNEL_CANDIDATES,
         "ecg": ECG_CHANNEL_CANDIDATES,
+        "ppg": PPG_CHANNEL_CANDIDATES,
         "eog": EOG_CHANNEL_CANDIDATES,
         "emg": EMG_CHANNEL_CANDIDATES,
         "resp": RESP_CHANNEL_CANDIDATES,
     }
-    raw = mne.io.read_raw_edf(str(edf_path), preload=True, verbose="ERROR")
-    sfreq = float(raw.info["sfreq"])
-    samples_per_epoch = max(1, int(round(epoch_seconds * sfreq)))
-    n_epochs = int(raw.n_times // samples_per_epoch)
-    if n_epochs < 4:
-        raise ValueError(f"too few epochs in {edf_path}")
-
+    # Pick channels from the header first, then read only those. NSRR EDFs mix sampling
+    # rates (MESA: EEG 256 Hz, resp 32 Hz), so read without preloading everything.
+    raw = mne.io.read_raw_edf(str(edf_path), preload=False, verbose="ERROR")
     picked: dict[str, list[str]] = {}
     for group, candidates in groups.items():
         matched = [label for label in candidates if label in raw.ch_names]
@@ -137,18 +137,25 @@ def load_nsrr_epoch_matrix(
             raise ValueError(f"no EEG channel in {edf_path}")
         picked["eeg"] = [eeg_fallback]
 
-    data = raw.get_data()
+    wanted = sorted({label for labels in picked.values() for label in labels})
+    raw.pick(wanted)
+    raw.load_data(verbose="ERROR")
+    sfreq = float(raw.info["sfreq"])
+    samples_per_epoch = max(1, int(round(epoch_seconds * sfreq)))
+    n_epochs = int(raw.n_times // samples_per_epoch)
+    if n_epochs < 4:
+        raise ValueError(f"too few epochs in {edf_path}")
+
+    data = raw.get_data().astype(np.float32)
     ch_index = {name: idx for idx, name in enumerate(raw.ch_names)}
+    n_keep = n_epochs * samples_per_epoch
     epochs: dict[str, np.ndarray] = {}
     for group, labels in picked.items():
-        # (n_epochs, samples, n_channels_in_group)
-        stacked = np.zeros((n_epochs, samples_per_epoch, len(labels)), dtype=np.float32)
-        for ch_i, label in enumerate(labels):
-            signal = data[ch_index[label]].astype(np.float32)
-            for epoch in range(n_epochs):
-                start = epoch * samples_per_epoch
-                stacked[epoch, :, ch_i] = signal[start : start + samples_per_epoch]
-        epochs[group] = stacked
+        # (n_epochs, samples, n_channels_in_group): one reshape per group, no per-epoch loop.
+        rows = data[[ch_index[label] for label in labels], :n_keep]
+        epochs[group] = np.ascontiguousarray(
+            rows.reshape(len(labels), n_epochs, samples_per_epoch).transpose(1, 2, 0)
+        )
 
     return {
         "epoch_seconds": epoch_seconds,
