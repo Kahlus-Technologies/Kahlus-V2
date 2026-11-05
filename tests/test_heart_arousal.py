@@ -4,7 +4,15 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.heart_arousal import anchor_labels
+from neurotwin.forecastability.heart_arousal import (
+    CARDIAC_NAMES,
+    EEG_NAMES,
+    PRIOR_NAMES,
+    anchor_labels,
+    cardiac_features,
+    eeg_features,
+    prior_features,
+)
 
 NIGHT = [("Stage 2 sleep", 0, 3000)]
 
@@ -38,6 +46,46 @@ class AnchorLabelTests(unittest.TestCase):
         t, _ = anchor_labels(events, total_s=3000, horizons=(5,))
         self.assertIn(1505.0, t.tolist())
         self.assertNotIn(1535.0, t.tolist())  # wake started 35 s ago, inside quiet window
+
+
+class FeatureTests(unittest.TestCase):
+    def test_cardiac_values_and_causality(self) -> None:
+        beats = np.arange(0.0, 200.0, 1.0)  # 60 bpm
+        rr = np.diff(beats)
+        times = beats[1:]
+        anchors = np.array([100.0])
+        f = cardiac_features(times, rr, anchors)[0]
+        named = dict(zip(CARDIAC_NAMES, f))
+        self.assertAlmostEqual(named["hr_60s"], 60.0, places=4)
+        self.assertAlmostEqual(named["rmssd_60s"], 0.0, places=6)
+        self.assertAlmostEqual(named["hr_ratio_10_60"], 1.0, places=4)
+        # Beats after the anchor must not change anything.
+        fast = np.concatenate([beats[beats <= 100], 100 + np.cumsum(np.full(100, 0.4))])
+        g = cardiac_features(fast[1:], np.diff(fast), anchors)[0]
+        np.testing.assert_allclose(f, g)
+
+    def test_cardiac_dropout_is_nan(self) -> None:
+        f = cardiac_features(np.array([1.0, 2.0]), np.array([1.0, 1.0]), np.array([100.0]))
+        self.assertTrue(np.isnan(f).all())
+
+    def test_prior_features(self) -> None:
+        events = NIGHT + [("Arousal", 500, 5)]
+        f = prior_features(events, np.array([400.0, 700.0]))
+        named = [dict(zip(PRIOR_NAMES, row)) for row in f]
+        self.assertEqual(named[0]["since_last_arousal_s"], 3600.0)  # none yet, capped
+        self.assertEqual(named[1]["since_last_arousal_s"], 200.0)
+        self.assertEqual(named[1]["stage_n2"], 1.0)
+
+    def test_eeg_band_and_causality(self) -> None:
+        fs = 128.0
+        t = np.arange(int(fs * 200)) / fs
+        eeg = np.sin(2 * np.pi * 10 * t)
+        f = eeg_features(eeg, fs, np.array([100.0]))[0]
+        named = dict(zip(EEG_NAMES, f))
+        self.assertGreater(named["eeg_alpha_rel"], 0.9)
+        eeg2 = eeg.copy()
+        eeg2[int(100 * fs) :] = np.random.default_rng(0).standard_normal(eeg2.size - int(100 * fs))
+        np.testing.assert_allclose(f, eeg_features(eeg2, fs, np.array([100.0]))[0])
 
 
 if __name__ == "__main__":

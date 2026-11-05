@@ -73,3 +73,85 @@ def anchor_labels(
         hit = gap <= h
         labels[:, k] = np.where(hit, np.where(first_spont, 1, -1), 0)
     return t, labels
+
+
+CARDIAC_WINDOWS_S = (10.0, 60.0)
+CARDIAC_NAMES = tuple(
+    f"{name}_{int(w)}s" for w in CARDIAC_WINDOWS_S for name in ("hr", "rmssd", "sdnn", "hr_slope", "n_beats")
+) + ("hr_ratio_10_60",)
+
+
+def cardiac_features(beat_times: np.ndarray, rr: np.ndarray, anchors: np.ndarray) -> np.ndarray:
+    """RR statistics over windows ending at each anchor, from beats closed at or before t.
+
+    NaN where a window has fewer than 3 intervals (signal dropout); the model sees it
+    as missing rather than as a fake zero heart rate.
+    """
+    out = np.full((anchors.size, len(CARDIAC_NAMES)), np.nan, dtype=np.float32)
+    hi = np.searchsorted(beat_times, anchors, side="right")
+    col = 0
+    mean_hr = {}
+    for w in CARDIAC_WINDOWS_S:
+        lo = np.searchsorted(beat_times, anchors - w, side="right")
+        for i in range(anchors.size):
+            seg = rr[lo[i] : hi[i]]
+            if seg.size < 3:
+                continue
+            hr = 60.0 / seg
+            out[i, col] = hr.mean()
+            out[i, col + 1] = np.sqrt(np.mean(np.diff(seg) ** 2))
+            out[i, col + 2] = seg.std()
+            out[i, col + 3] = np.polyfit(beat_times[lo[i] : hi[i]] - anchors[i], hr, 1)[0]
+            out[i, col + 4] = seg.size
+        mean_hr[w] = out[:, col]
+        col += 5
+    out[:, col] = mean_hr[10.0] / mean_hr[60.0]
+    return out
+
+
+PRIOR_NAMES = ("since_last_arousal_s", "since_sleep_onset_s", "stage_n1", "stage_n2", "stage_n3", "stage_rem")
+
+
+def prior_features(events: list[tuple[str, float, float]], anchors: np.ndarray) -> np.ndarray:
+    """Context a clinician-free model could know at t: time since the last arousal
+    onset, time since the first scored sleep epoch, and the last completed stage."""
+    onsets = np.sort(np.asarray([s for c, s, _ in events if "arousal" in c.lower()], dtype=np.float64))
+    stages = sleep_stage_epochs(events)
+    sleep_onset = next((s for s, _, c in stages if c in SLEEP_STAGES), 0.0)
+    k = np.searchsorted(onsets, anchors, side="right") - 1
+    since = np.where(k >= 0, anchors - onsets[np.maximum(k, 0)] if onsets.size else np.inf, np.inf)
+    since = np.minimum(since, 3600.0)  # ponytail: cap at 1 h; log/spline transform is the upgrade path
+    out = np.zeros((anchors.size, len(PRIOR_NAMES)), dtype=np.float32)
+    out[:, 0] = since
+    out[:, 1] = anchors - sleep_onset
+    stage_cols = {"Stage 1 sleep": 2, "Stage 2 sleep": 3, "Stage 3 sleep": 4, "Stage 4 sleep": 4, "REM sleep": 5}
+    starts = np.asarray([s for s, _, _ in stages])
+    idx = np.searchsorted(starts, anchors - EPOCH_S, side="right") - 1
+    for i, j in enumerate(idx):
+        if j >= 0 and stages[j][2] in stage_cols:
+            out[i, stage_cols[stages[j][2]]] = 1.0
+    return out
+
+
+EEG_BANDS_HZ = {"delta": (0.5, 4), "theta": (4, 8), "alpha": (8, 12), "sigma": (12, 16), "beta": (16, 30)}
+EEG_NAMES = tuple(f"eeg_{b}_rel" for b in EEG_BANDS_HZ) + ("eeg_log_power",)
+
+
+def eeg_features(eeg: np.ndarray, fs: float, anchors: np.ndarray, *, window_s: float = 30.0) -> np.ndarray:
+    """Relative band power of the ``window_s`` of EEG ending at each anchor."""
+    n = int(window_s * fs)
+    freqs = np.fft.rfftfreq(n, 1.0 / fs)
+    masks = [(freqs >= lo) & (freqs < hi) for lo, hi in EEG_BANDS_HZ.values()]
+    total_mask = (freqs >= 0.5) & (freqs < 30)
+    out = np.full((anchors.size, len(EEG_NAMES)), np.nan, dtype=np.float32)
+    ends = (anchors * fs).astype(np.int64)
+    ok = (ends - n >= 0) & (ends <= eeg.size)
+    if not ok.any():
+        return out
+    segs = np.stack([eeg[e - n : e] for e in ends[ok]])
+    segs = segs - segs.mean(axis=1, keepdims=True)
+    psd = np.abs(np.fft.rfft(segs * np.hanning(n), axis=1)) ** 2
+    total = psd[:, total_mask].sum(axis=1) + 1e-20
+    out[ok, : len(masks)] = np.stack([psd[:, m].sum(axis=1) / total for m in masks], axis=1)
+    out[ok, -1] = np.log10(total)
+    return out
