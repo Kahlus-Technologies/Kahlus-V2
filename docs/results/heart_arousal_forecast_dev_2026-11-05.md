@@ -1,6 +1,6 @@
 # Heart-only arousal forecasting: dev-slice result (2026-11-05)
 
-Status: **dev slice, mostly negative after controls, reproduced from a fresh clone**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features add essentially nothing for 2-120 s arousal forecasting, and a tiny transferable amount at 1 s (Result 6). Results 1-4 are kept as the path to that conclusion.
+Status: **dev slice, unresolved after an independent review; result sign is not stable at n = 25 + 25**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features give at most a small, unstable gain at 5-120 s and a small one at 1-5 s (Results 5-6). Not a claim either way. Results 1-4 are kept as the path to that conclusion.
 
 ## Setup
 - Anchor every 5 s during sleep with 60 s of quiet before it (no arousal, respiratory event, limb movement, or wake). Inputs end at the anchor. The stage score of the epoch containing the anchor is never used.
@@ -55,31 +55,31 @@ Two more runs (`artifacts/heart_arousal_dev25_causal/report.json`):
 - **Causal normalizer:** z-score each anchor against earlier anchors in the same night only (5 min warmup). This removes the whole-night look-ahead in Result 4. Cardiac bits over prior grew: 20/20 cells non-negative, 10 with CI > 0.
 - **Shift control:** the same cardiac features rotated by half a night inside each night (`prior+cardiac_shift`). They keep each person's distribution, drift and dropout pattern but lose alignment with the labels. This control *also* gained bits over prior, so the Result 4 gains were mostly the model recognizing the person (and their arousal rate), not reading a precursor.
 
-Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift (regenerated 2026-11-05 from a fresh clone, after the beat quality mask):
+Headline metric, aligned cardiac bits = prior+cardiac vs prior+cardiac_shift. Regenerated after the independent review fixes (causal QRS detector, trailing beat-quality mask, quiet window counting event durations, shift control rolled after normalization):
 
 | horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
 |---|---|---|---|---|
-| 5 s | +0.0005 [-0.0006, +0.0018] | +0.0005 [-0.0002, +0.0012] | -0.0005 [-0.0014, +0.0004] | +0.0007 [-0.0004, +0.0017] |
-| 15 s | +0.0008 [-0.0018, +0.0038] | +0.0001 [-0.0048, +0.0039] | +0.0001 [-0.0024, +0.0028] | -0.0026 [-0.0058, +0.0006] |
-| 30 s | +0.0043 [-0.0002, +0.0091] | +0.0039 [-0.0026, +0.0106] | -0.0021 [-0.0054, +0.0009] | -0.0014 [-0.0069, +0.0045] |
-| 60 s | +0.0041 [-0.0063, +0.0133] | +0.0008 [-0.0075, +0.0082] | -0.0028 [-0.0090, +0.0033] | -0.0023 [-0.0182, +0.0113] |
-| 120 s | +0.0138 [-0.0055, +0.0357] | +0.0048 [-0.0092, +0.0168] | +0.0025 [-0.0092, +0.0132] | +0.0045 [-0.0099, +0.0237] |
+| 5 s | +0.0005 [-0.0009, +0.0014] | **+0.0008 [+0.0001, +0.0016]** | **+0.0006 [+0.0001, +0.0012]** | +0.0006 [-0.0003, +0.0015] |
+| 15 s | +0.0004 [-0.0031, +0.0033] | -0.0025 [-0.0061, +0.0004] | +0.0032 [-0.0004, +0.0064] | +0.0028 [-0.0005, +0.0072] |
+| 30 s | -0.0044 [-0.0158, +0.0049] | +0.0005 [-0.0054, +0.0059] | **+0.0097 [+0.0042, +0.0165]** | **+0.0104 [+0.0045, +0.0170]** |
+| 60 s | -0.0001 [-0.0192, +0.0160] | +0.0031 [-0.0078, +0.0153] | **+0.0116 [+0.0011, +0.0206]** | +0.0083 [-0.0097, +0.0240] |
+| 120 s | +0.0012 [-0.0299, +0.0222] | -0.0205 [-0.0475, +0.0098] | +0.0090 [-0.0096, +0.0261] | +0.0174 [-0.0086, +0.0442] |
 
-0 of 20 cells have a CI that excludes zero. Before the quality mask, 2 MESA cells cleared zero; dropping implausible-HR blocks removed even those, so they were not robust. Call it null on the dev slice.
+5 of 20 cells now have a CI above zero (it was 0 before the fixes, 2 before that). The positives sit mostly in the cross-cohort columns (both directions at 30 s), while within-cohort CV stays null; a real time-locked precursor should show in both. With 20 cells, smoke bootstrap (300 resamples) and no multiplicity control, about 1 false positive is expected.
 
-The same regeneration (`scripts/repro_dev_slice.sh`) reproduced the census, beat-level, CLAS, montage and event-locked HR artifacts exactly. The raw and whole-night z runs (Results 1 and 4 tables above) predate the quality mask; their regenerated reports are in the same artifact paths and move individual cells but not the conclusions.
+**Read: unresolved and small.** The sign of this result has moved with each change to the control and detector, which is itself the finding at n = 25 + 25. It is not a null and not a positive. Only the full-cohort, claim-mode run can settle it.
 
 ## Result 6: beat-level 1-5 s warning
 `scripts/run_beat_warning.py`, `artifacts/beat_warning_dev25/report.json`. 1 s anchor grid (about 245k anchors per cohort), last 5 RR intervals relative to the prior minute, half-night shift control. Aligned beat bits (prior+beats vs prior+beats_shift):
 
 | horizon | MESA CV | SHHS CV | MESA to SHHS | SHHS to MESA |
 |---|---|---|---|---|
-| 1 s | +0.0002 | **+0.0005 [+0.0001, +0.0009]** | **+0.0004 [+0.0001, +0.0007]** | **+0.0004 [+0.0001, +0.0007]** |
-| 2 s | -0.0000 | +0.0005 | -0.0001 | +0.0003 |
-| 3 s | **+0.0007 [+0.0001, +0.0015]** | -0.0001 | -0.0004 | +0.0002 |
-| 5 s | +0.0006 | +0.0007 | -0.0002 | +0.0005 |
+| 1 s | +0.0002 | **+0.0003 [+0.0001, +0.0006]** | **+0.0003 [+0.0001, +0.0006]** | +0.0003 |
+| 2 s | +0.0002 | **+0.0011 [+0.0006, +0.0015]** | **+0.0005 [+0.0002, +0.0009]** | +0.0004 |
+| 3 s | **+0.0014 [+0.0007, +0.0022]** | +0.0008 | +0.0004 | +0.0003 |
+| 5 s | **+0.0029 [+0.0012, +0.0060]** | **+0.0013 [+0.0006, +0.0020]** | +0.0003 | +0.0011 |
 
-At 1 s the effect transfers in both directions, which matches the event-locked curve (HR rises only in the last second or two). But it is about 1% of the label entropy (base rate 0.3 to 0.4%), so it is real-looking and tiny. Part of it may be scorer timing: a scorer marks onset from EEG, and the HR rise may already be the arousal starting.
+After the review fixes (causal detector, so no beat can see past t) all 16 point estimates are positive and 8 CIs clear zero, at roughly 1% of label entropy. This is the most consistent heart signal in the study, still smoke-bootstrap with no multiplicity control. Part of it may be scorer timing: a scorer marks onset from EEG, and the HR rise may already be the arousal starting.
 
 ## What this changes
 - Every future comparison must include the shift control. Without it, any per-person feature looks predictive.

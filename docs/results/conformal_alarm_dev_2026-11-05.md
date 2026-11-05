@@ -11,14 +11,14 @@ Status: **dev slice, method works, alarms are not useful yet**. Table regenerate
 
 | | alpha 0.1 | 0.2 | 0.3 | 0.5 |
 |---|---|---|---|---|
-| MESA within | 0.140, 516 | 0.242, 419 | 0.347, 324 | 0.562, 178 |
-| SHHS within | 0.066, 545 | 0.141, 452 | 0.229, 371 | 0.456, 224 |
-| MESA to SHHS | 0.089, 499 | 0.188, 408 | 0.294, 321 | 0.510, 182 |
-| SHHS to MESA | 0.077, 547 | 0.169, 453 | 0.240, 379 | 0.412, 245 |
+| MESA within | 0.123, 539 | 0.238, 436 | 0.344, 344 | 0.532, 214 |
+| SHHS within | 0.071, 550 | 0.183, 433 | 0.267, 359 | 0.444, 238 |
+| MESA to SHHS | 0.127, 491 | 0.209, 418 | 0.332, 318 | 0.558, 169 |
+| SHHS to MESA | 0.084, 561 | 0.157, 490 | 0.219, 435 | 0.404, 293 |
 
-- **Overall coverage roughly holds.** The realized miss rate stays within about 4 points of alpha (worst: MESA 0.140 at 0.1, 0.062 at 0.5), even across cohorts. MESA runs slightly over (0.140 at alpha 0.1), which is the expected cost of positives within a night not being independent and only 6 calibration subjects.
-- **Per-subject coverage does not.** At alpha 0.2 the per-subject miss rate spans 0.18 to 0.39 (p10 to p90) in MESA. A guarantee on average is not a guarantee for the person wearing the device. Subject-level (Mondrian or hierarchical) calibration is the fix, which needs more subjects than 25.
-- **The alarms are too frequent to use.** At 5 s anchors there are 720 anchors per hour, so 400 to 550 false alarms per hour means alarming on 60 to 85% of anchors. The prior-only model gives almost the same table (e.g. MESA alpha 0.1: 0.124 miss, 513 FA/h), consistent with #83: the cardiac block adds nothing here.
+- **Overall coverage roughly holds.** The realized miss rate stays within about 4 points of alpha (worst: MESA 0.123 at 0.1), even across cohorts. MESA runs slightly over (0.123 at alpha 0.1), which is the expected cost of positives within a night not being independent and only 6 calibration subjects.
+- **Per-subject coverage does not.** At alpha 0.2 the per-subject miss rate spans 0.07 to 0.36 (p10 to p90, pooled over 5 seeds) in MESA. A guarantee on average is not a guarantee for the person wearing the device. Subject-level (Mondrian or hierarchical) calibration is the fix, which needs more subjects than 25.
+- **The alarms are too frequent to use.** At 5 s anchors there are 720 anchors per hour, so 400 to 550 false alarms per hour means alarming on 60 to 85% of anchors. The prior-only model gives almost the same table (MESA alpha 0.1: 0.120 miss, 530 FA/h; `artifacts/conformal_alarm_dev25_prior/report.json`), consistent with #83: the cardiac block adds nothing here.
 
 ## What this changes
 - The conformal machinery is correct (unit test confirms the bound on exchangeable data) and cheap. It is ready to wrap any better forecaster.

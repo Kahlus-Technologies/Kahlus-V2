@@ -1,6 +1,6 @@
 # Low-cost montage stress test: dev-slice result (2026-11-05)
 
-Status: **dev slice, method works, baseline detector is weak**. Refs #97. Code: `src/neurotwin/forecastability/montage_degrade.py`, `scripts/run_montage_stress.py`. Numbers: `artifacts/montage_stress_dev25/report.json`.
+Status: **dev slice, method works, baseline detector is weak**. Table regenerated after the arousal-label end fix. Refs #97. Code: `src/neurotwin/forecastability/montage_degrade.py`, `scripts/run_montage_stress.py`. Numbers: `artifacts/montage_stress_dev25/report.json`.
 
 ## Setup
 - Detector: one C4 channel, per-second features from the 3 s of EEG ending at t (relative band power, log power, plus a causal within-night z-score), one fixed gradient-boosting model. Trained on clean PSG from one cohort, tested on the other.
@@ -11,12 +11,12 @@ Status: **dev slice, method works, baseline detector is weak**. Refs #97. Code: 
 
 | level | MESA to SHHS: F1 / precision / recall / false det. per h | SHHS to MESA |
 |---|---|---|
-| clean | 0.244 / 0.188 / 0.350 / 28 | 0.200 / 0.139 / 0.356 / 45 |
-| noise 5 uV | 0.201 / 0.130 / 0.438 / 54 | 0.196 / 0.138 / 0.339 / 44 |
-| noise 10 uV | 0.111 / 0.062 / 0.544 / 153 | 0.155 / 0.098 / 0.368 / 69 |
-| noise 20 uV | 0.079 / 0.043 / 0.518 / 216 | 0.098 / 0.055 / 0.454 / 161 |
-| dry headband | 0.103 / 0.057 / 0.498 / 153 | 0.132 / 0.086 / 0.279 / 61 |
-| bad dry headband | 0.069 / 0.038 / 0.403 / 189 | 0.083 / 0.049 / 0.290 / 116 |
+| clean | 0.251 / 0.193 / 0.357 / 28 | 0.204 / 0.144 / 0.351 / 43 |
+| noise 5 uV | 0.208 / 0.136 / 0.446 / 53 | 0.195 / 0.138 / 0.333 / 42 |
+| noise 10 uV | 0.115 / 0.064 / 0.548 / 149 | 0.153 / 0.099 / 0.335 / 62 |
+| noise 20 uV | 0.081 / 0.044 / 0.517 / 209 | 0.110 / 0.064 / 0.406 / 122 |
+| dry headband | 0.104 / 0.058 / 0.487 / 147 | 0.129 / 0.086 / 0.257 / 56 |
+| bad dry headband | 0.068 / 0.037 / 0.402 / 193 | 0.086 / 0.052 / 0.251 / 93 |
 
 Median timing error of matched events is 1.5 to 2.1 s throughout.
 
