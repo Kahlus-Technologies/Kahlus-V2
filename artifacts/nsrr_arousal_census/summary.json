@@ -1,0 +1,22 @@
+{
+  "mesa": {
+    "total": 323452,
+    "respiratory": 82283,
+    "limb": 22687,
+    "spontaneous": 218482,
+    "clean_spontaneous": 57767,
+    "n_subjects": 2056,
+    "frac_spontaneous": 0.675,
+    "clean_per_subject_median": 27.0,
+    "clean_per_subject_iqr": [
+      17.0,
+      38.0
+    ],
+    "subjects_with_ge10_clean": 1819,
+    "params": {
+      "RESP_GAP_S": 5.0,
+      "LIMB_GAP_S": 0.5,
+      "CLEAN_PRE_S": 60.0
+    }
+  }
+}
