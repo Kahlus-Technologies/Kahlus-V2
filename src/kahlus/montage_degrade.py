@@ -58,3 +58,35 @@ def degrade(x_uv: np.ndarray, fs: float, level: str, seed: int = 0) -> np.ndarra
     if "rms_uv" in p:
         out = add_white_noise(out, p["rms_uv"], seed=seed + 1)
     return out
+
+
+def detected_onsets(prob: np.ndarray, times: np.ndarray, threshold: float, min_gap_s: float = 10.0) -> np.ndarray:
+    """Rising edges of prob >= threshold, merged when closer than min_gap_s."""
+    above = prob >= threshold
+    rises = times[np.flatnonzero(above & ~np.concatenate([[False], above[:-1]]))]
+    kept: list[float] = []
+    for t in rises:
+        if not kept or t - kept[-1] >= min_gap_s:
+            kept.append(float(t))
+    return np.asarray(kept)
+
+
+def match_events(detected: np.ndarray, truth: np.ndarray, tol_s: float) -> dict:
+    """Greedy one-to-one matching of detected to true onsets within tol_s."""
+    used = np.zeros(truth.size, dtype=bool)
+    errors = []
+    for d in detected:
+        if truth.size == 0:
+            break
+        gap = np.abs(truth - d)
+        gap[used] = np.inf
+        j = int(np.argmin(gap))
+        if gap[j] <= tol_s:
+            used[j] = True
+            errors.append(float(d - truth[j]))
+    tp = len(errors)
+    precision = tp / detected.size if detected.size else 0.0
+    recall = tp / truth.size if truth.size else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    return {"tp": tp, "n_detected": int(detected.size), "n_true": int(truth.size), "precision": precision,
+            "recall": recall, "f1": f1, "median_abs_timing_error_s": float(np.median(np.abs(errors))) if errors else float("nan")}

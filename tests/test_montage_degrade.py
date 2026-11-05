@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.montage_degrade import LEVELS, add_white_noise, degrade, downsample
+from neurotwin.forecastability.montage_degrade import LEVELS, add_white_noise, degrade, detected_onsets, downsample, match_events
 
 
 class MontageDegradeTests(unittest.TestCase):
@@ -32,6 +32,18 @@ class MontageDegradeTests(unittest.TestCase):
         self.assertAlmostEqual(fs2, 100.0, places=6)
         f = np.fft.rfftfreq(y.size, 1 / fs2)
         self.assertAlmostEqual(f[np.argmax(np.abs(np.fft.rfft(y)))], 10.0, delta=0.1)
+
+    def test_detected_onsets_merges_close_rises(self) -> None:
+        t = np.arange(30.0)
+        p = np.zeros(30)
+        p[[3, 4, 6, 20]] = 1.0  # rises at 3, 6 (merged into 3), 20
+        np.testing.assert_array_equal(detected_onsets(p, t, 0.5), [3.0, 20.0])
+
+    def test_match_events(self) -> None:
+        m = match_events(np.array([10.0, 30.0, 31.0, 80.0]), np.array([11.0, 30.5, 60.0]), tol_s=3.0)
+        self.assertEqual((m["tp"], m["n_detected"], m["n_true"]), (2, 4, 3))
+        self.assertAlmostEqual(m["f1"], 2 * 0.5 * (2 / 3) / (0.5 + 2 / 3))
+        self.assertAlmostEqual(m["median_abs_timing_error_s"], 0.75)
 
 
 if __name__ == "__main__":
