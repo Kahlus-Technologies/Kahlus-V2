@@ -52,7 +52,7 @@ def main() -> int:
     bt, rr = causal_beats(ecg, fs)
     sel = (bt >= onset - PRE_S) & (bt <= onset + POST_S)
 
-    fig = plt.figure(figsize=(16, 6), dpi=150, facecolor=BG)
+    fig = plt.figure(figsize=(16, 6), dpi=200, facecolor=BG)
     ax = fig.add_axes([0.0, 0.0, 1.0, 0.58], facecolor=BG)
     norm = lambda x: (x - np.median(x)) / (np.percentile(np.abs(x - np.median(x)), 99) + 1e-9)  # noqa: E731
     ax.plot(t, norm(e) * 0.9 + 2.2, color=INK, lw=0.7, alpha=0.95)
@@ -71,8 +71,8 @@ def main() -> int:
     ax.axis("off")
 
     mark = Image.open(Path(__file__).resolve().parents[1] / "docs/assets/kahlus-wordmark-light.png")
-    wax = fig.add_axes([0.32, 0.70, 0.36, 0.13])
-    wax.imshow(np.asarray(mark))
+    wax = fig.add_axes([0.30, 0.70, 0.40, 0.13])
+    wax.imshow(np.asarray(mark), interpolation="lanczos")
     wax.axis("off")
     fig.text(0.5, 0.635, "SENSE  ·  UNDERSTAND  ·  RECOVER", color=DIM, ha="center", fontsize=11, family="monospace")
     a.out.parent.mkdir(parents=True, exist_ok=True)
