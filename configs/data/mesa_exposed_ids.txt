@@ -1,0 +1,27 @@
+# MESA participants whose full signals were examined during development (dev slice, 2026-11-04).
+# Excluded from the final MESA evaluation. See docs/results/mesa_exposure.md.
+0001
+0002
+0006
+0010
+0012
+0014
+0016
+0021
+0027
+0028
+0033
+0035
+0036
+0038
+0046
+0048
+0050
+0052
+0054
+0056
+0064
+0070
+0074
+0077
+0079

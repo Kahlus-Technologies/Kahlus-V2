@@ -149,7 +149,8 @@ class NsrrAdapterTests(unittest.TestCase):
             self.assertEqual(discover_nsrr_recordings(root, dataset="mesa"), [])
 
     def _write_stub_nsrr_cohort(self, root: Path, *, n_subjects: int) -> None:
-        for i in range(1, n_subjects + 1):
+        # Dev-slice IDs, so the MESA seal (KAHLUS_MESA=dev) lets them through.
+        for i in (1, 2, 6, 10, 12, 14)[:n_subjects]:
             stem = f"mesa-sleep-{i:04d}"
             edf = root / f"{stem}.edf"
             xml = root / f"{stem}-nsrr.xml"

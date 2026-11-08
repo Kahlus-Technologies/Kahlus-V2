@@ -5,7 +5,9 @@ Credentialed download required from https://sleepdata.org/. Raw data never commi
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import re
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -31,7 +33,39 @@ class NsrrRecording:
     dataset: str
 
 
+_REPO = Path(__file__).resolve().parents[3]
+MESA_EXPOSED_IDS = _REPO / "configs/data/mesa_exposed_ids.txt"
+MESA_FROZEN_PLAN = _REPO / "docs/results/full_cohort_plan.md"
+
+
+def mesa_exposed_ids() -> frozenset[str]:
+    lines = MESA_EXPOSED_IDS.read_text().splitlines()
+    return frozenset(s.strip() for s in lines if s.strip() and not s.startswith("#"))
+
+
+def _mesa_gate(recs: list[NsrrRecording]) -> list[NsrrRecording]:
+    """MESA holdout seal. Default (KAHLUS_MESA unset or "dev"): only the 25 already-exposed
+    dev-slice nights, so no run can widen MESA exposure. "final": only never-seen nights, and
+    only once the frozen plan is committed. See docs/results/mesa_exposure.md."""
+    mode = os.environ.get("KAHLUS_MESA", "dev")
+    exposed = mesa_exposed_ids()
+    if mode == "dev":
+        return [r for r in recs if r.subject_id in exposed]
+    if mode == "final":
+        if not MESA_FROZEN_PLAN.is_file():
+            raise RuntimeError(f"KAHLUS_MESA=final needs the frozen plan at {MESA_FROZEN_PLAN}")
+        print("KAHLUS_MESA=final: scoring held-out MESA nights. This is the single final look.", file=sys.stderr)
+        return [r for r in recs if r.subject_id not in exposed]
+    raise ValueError(f"KAHLUS_MESA must be 'dev' or 'final', got {mode!r}")
+
+
 def discover_nsrr_recordings(root: str | Path, *, dataset: str) -> list[NsrrRecording]:
+    recs = _discover(root, dataset)
+    is_mesa = dataset.lower().startswith("mesa") or any(r.edf_path.name.startswith("mesa") for r in recs)
+    return _mesa_gate(recs) if is_mesa else recs
+
+
+def _discover(root: str | Path, dataset: str) -> list[NsrrRecording]:
     root = Path(root)
     if not root.is_dir():
         return []
