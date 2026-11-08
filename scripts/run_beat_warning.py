@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 
-from neurotwin.adapters.nsrr import discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events
+from neurotwin.adapters.nsrr import discover_nsrr_recordings, mesa_fit_allowed, load_nsrr_epoch_matrix, parse_nsrr_events
 from neurotwin.adapters.qrs_fast import causal_beats
 from neurotwin.forecastability.heart_arousal import COHORTS, anchor_labels, beat_features, fit_predict, half_night_shift, prior_features
 from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
@@ -88,11 +88,12 @@ def main() -> int:
     report = {}
     for k, h in enumerate(HORIZONS):
         r = report[f"h{h}"] = {
-            "mesa_cv": run(data["mesa"], None, k, a.seed, a.bootstrap),
             "shhs_cv": run(data["shhs"], None, k, a.seed, a.bootstrap),
-            "mesa_to_shhs": run(data["mesa"], data["shhs"], k, a.seed, a.bootstrap),
             "shhs_to_mesa": run(data["shhs"], data["mesa"], k, a.seed, a.bootstrap),
         }
+        if mesa_fit_allowed():  # final mode: held-out MESA is test-only
+            r["mesa_cv"] = run(data["mesa"], None, k, a.seed, a.bootstrap)
+            r["mesa_to_shhs"] = run(data["mesa"], data["shhs"], k, a.seed, a.bootstrap)
         key = "prior+beats vs prior+beats_shift"
         print(f"h={h}s aligned-beat bits " + "  ".join(f"{s}: {v[key]['bits']:+.4f} [{v[key]['lo']:+.4f},{v[key]['hi']:+.4f}] pos={v['pos']}" for s, v in r.items()))
     a.out.mkdir(parents=True, exist_ok=True)

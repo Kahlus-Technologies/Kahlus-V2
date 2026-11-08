@@ -24,6 +24,7 @@ import numpy as np
 from neurotwin.adapters.nsrr import (
     SLEEP_STAGES,
     discover_nsrr_recordings,
+    mesa_fit_allowed,
     event_kind,
     load_nsrr_epoch_matrix,
     parse_nsrr_events,
@@ -88,6 +89,8 @@ def main() -> int:
     clean = {c: [night_rows(e, fs, ev, "clean", i) for i, (e, fs, ev) in enumerate(raw[c])] for c in raw}
     report = {"tol_s": TOL_S, "levels": list(LEVELS), "results": {}}
     for src, dst in (("mesa", "shhs"), ("shhs", "mesa")):
+        if src == "mesa" and not mesa_fit_allowed():
+            continue  # final mode: held-out MESA is test-only
         tr = clean[src]
         x, y = np.concatenate([n["x"] for n in tr]), np.concatenate([n["y"] for n in tr])
         ok = ~np.isnan(x).all(axis=1)

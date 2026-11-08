@@ -26,6 +26,7 @@ import numpy as np
 from neurotwin.adapters.nsrr import (
     classify_arousals,
     discover_nsrr_recordings,
+    mesa_fit_allowed,
     load_nsrr_epoch_matrix,
     parse_nsrr_events,
     sleep_stage_epochs,
@@ -119,8 +120,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     data = {c: load(c, getattr(a, c), a.out / "cache") for c in ("mesa", "shhs")}
-    report = {"window_s": WINDOW_S, "replay_on_mesa_risk_from_shhs": replay(data["mesa"], data["shhs"], 0),
-              "replay_on_shhs_risk_from_mesa": replay(data["shhs"], data["mesa"], 0)}
+    report = {"window_s": WINDOW_S, "replay_on_mesa_risk_from_shhs": replay(data["mesa"], data["shhs"], 0)}
+    if mesa_fit_allowed():  # final mode: held-out MESA is test-only
+        report["replay_on_shhs_risk_from_mesa"] = replay(data["shhs"], data["mesa"], 0)
     for name, r in report.items():
         if isinstance(r, dict):
             print(name, f"clicks {r['clicks']} bad {r['bad_clicks']} ({r['bad_rate']:.3%})")

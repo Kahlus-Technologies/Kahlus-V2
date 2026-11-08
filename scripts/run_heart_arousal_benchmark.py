@@ -28,7 +28,7 @@ import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import GroupKFold
 
-from neurotwin.adapters.nsrr import discover_nsrr_recordings
+from neurotwin.adapters.nsrr import discover_nsrr_recordings, mesa_fit_allowed
 from neurotwin.forecastability.heart_arousal import (
     COHORTS,
     HORIZONS_S,
@@ -178,9 +178,11 @@ def main() -> int:
     report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
     for k, h in enumerate(HORIZONS_S):
         r = report["results"][f"h{h}"] = {}
-        for c in ("mesa", "shhs"):
+        fit_mesa = mesa_fit_allowed()  # final mode: held-out MESA is test-only (SHHS -> MESA)
+        for c in ("mesa", "shhs") if fit_mesa else ("shhs",):
             r[f"{c}_cv"] = score(within_cohort(data[c], k, a.seed), a.seed, a.bootstrap)
-        r["mesa_to_shhs"] = score(transfer(data["mesa"], data["shhs"], k, a.seed), a.seed, a.bootstrap)
+        if fit_mesa:
+            r["mesa_to_shhs"] = score(transfer(data["mesa"], data["shhs"], k, a.seed), a.seed, a.bootstrap)
         r["shhs_to_mesa"] = score(transfer(data["shhs"], data["mesa"], k, a.seed), a.seed, a.bootstrap)
         key = "prior+cardiac vs prior+cardiac_shift"
         print(f"h={h:>3}s aligned-cardiac bits " + "  ".join(
