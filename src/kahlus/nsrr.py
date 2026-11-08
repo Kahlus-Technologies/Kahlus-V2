@@ -5,9 +5,13 @@ Credentialed download required from https://sleepdata.org/. Raw data never commi
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import os
 import re
+import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -36,6 +40,7 @@ class NsrrRecording:
 _REPO = Path(__file__).resolve().parents[3]
 MESA_EXPOSED_IDS = _REPO / "configs/data/mesa_exposed_ids.txt"
 MESA_FROZEN_PLAN = _REPO / "docs/results/full_cohort_plan.md"
+MESA_FINAL_LOOKS = _REPO / "docs/results/mesa_final_looks"
 
 
 def mesa_exposed_ids() -> frozenset[str]:
@@ -43,20 +48,68 @@ def mesa_exposed_ids() -> frozenset[str]:
     return frozenset(s.strip() for s in lines if s.strip() and not s.startswith("#"))
 
 
-def _mesa_gate(recs: list[NsrrRecording]) -> list[NsrrRecording]:
-    """MESA holdout seal. Default (KAHLUS_MESA unset or "dev"): only the 25 already-exposed
-    dev-slice nights, so no run can widen MESA exposure. "final": only never-seen nights, and
-    only once the frozen plan is committed. See docs/results/mesa_exposure.md."""
+def mesa_mode() -> str:
     mode = os.environ.get("KAHLUS_MESA", "dev")
+    if mode not in ("dev", "final"):
+        raise ValueError(f"KAHLUS_MESA must be 'dev' or 'final', got {mode!r}")
+    return mode
+
+
+def mesa_fit_allowed() -> bool:
+    """False in final mode: held-out MESA is evaluation-only (no fitting, CV, thresholds or calibration)."""
+    return mesa_mode() != "final"
+
+
+def _git(*args: str) -> str:
+    return subprocess.run(["git", "-C", str(_REPO), *args], capture_output=True, text=True, check=True).stdout
+
+
+def _check_frozen() -> dict:
+    """Final mode needs the frozen plan tracked in git and a clean tree, so the code that runs is a commit."""
+    try:
+        _git("ls-files", "--error-unmatch", str(MESA_FROZEN_PLAN))
+        dirty = _git("status", "--porcelain", "--untracked-files=no")
+        head = _git("rev-parse", "HEAD").strip()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise RuntimeError(f"KAHLUS_MESA=final needs {MESA_FROZEN_PLAN} committed to git") from exc
+    if dirty:
+        raise RuntimeError(f"KAHLUS_MESA=final needs a clean git tree (commit everything first):\n{dirty}")
+    return {"commit": head, "plan_sha256": hashlib.sha256(MESA_FROZEN_PLAN.read_bytes()).hexdigest()}
+
+
+def _claim_final_look() -> None:
+    """One final look per script. The first call writes a ledger entry; any later process refuses.
+    ponytail: a local file can be deleted. The ledger is committed with the results, so a rerun shows
+    in git history. A tamper-proof seal (e.g. key held by a third party) is the upgrade path."""
+    script = Path(sys.argv[0]).stem or "interactive"
+    entry = MESA_FINAL_LOOKS / f"{script}.json"
+    if entry.exists():
+        if json.loads(entry.read_text()).get("pid") == os.getpid():
+            return
+        raise RuntimeError(f"MESA final look already used by {script}: {entry}. Rerunning would make it a second look.")
+    info = _check_frozen() | {"script": script, "argv": sys.argv, "pid": os.getpid(),
+                              "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    MESA_FINAL_LOOKS.mkdir(parents=True, exist_ok=True)
+    with open(entry, "x") as f:  # exclusive create: two racing processes cannot both claim
+        json.dump(info, f, indent=2)
+    print(f"KAHLUS_MESA=final: single final look for {script}, logged to {entry}. Commit it.", file=sys.stderr)
+
+
+def gate_mesa_ids(ids) -> list[str]:
+    """MESA holdout seal on subject IDs. Every MESA reader (EDF, XML or feature cache) goes through this.
+    dev (default): only the 25 already-exposed nights, so no run can widen exposure.
+    final: only never-seen nights, after the frozen plan is committed, once per script.
+    See docs/results/mesa_exposure.md."""
     exposed = mesa_exposed_ids()
-    if mode == "dev":
-        return [r for r in recs if r.subject_id in exposed]
-    if mode == "final":
-        if not MESA_FROZEN_PLAN.is_file():
-            raise RuntimeError(f"KAHLUS_MESA=final needs the frozen plan at {MESA_FROZEN_PLAN}")
-        print("KAHLUS_MESA=final: scoring held-out MESA nights. This is the single final look.", file=sys.stderr)
-        return [r for r in recs if r.subject_id not in exposed]
-    raise ValueError(f"KAHLUS_MESA must be 'dev' or 'final', got {mode!r}")
+    if mesa_mode() == "dev":
+        return [i for i in ids if i in exposed]
+    _claim_final_look()
+    return [i for i in ids if i not in exposed]
+
+
+def _mesa_gate(recs: list[NsrrRecording]) -> list[NsrrRecording]:
+    keep = set(gate_mesa_ids([r.subject_id for r in recs]))
+    return [r for r in recs if r.subject_id in keep]
 
 
 def discover_nsrr_recordings(root: str | Path, *, dataset: str) -> list[NsrrRecording]:

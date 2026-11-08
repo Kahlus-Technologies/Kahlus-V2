@@ -20,6 +20,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_heart_arousal_benchmark import MODELS, design  # noqa: E402
 
+from neurotwin.adapters.nsrr import gate_mesa_ids, mesa_fit_allowed
 from neurotwin.forecastability.conformal import alarm_metrics, miss_rate_threshold
 from neurotwin.forecastability.heart_arousal import HORIZONS_S, STEP_S, causal_z, fit_predict
 
@@ -29,7 +30,11 @@ ALPHAS = (0.1, 0.2, 0.3, 0.5)
 def load(cache: Path, cohort: str, k: int) -> dict:
     """Per-subject arrays from the benchmark cache, causal-normalized, label column k."""
     subs = []
-    for f in sorted(cache.glob(f"{cohort}-*.npz")):
+    files = sorted(cache.glob(f"{cohort}-*.npz"))
+    if cohort == "mesa":  # caches go through the same MESA seal as raw files
+        keep = set(gate_mesa_ids([f.stem.split("-", 1)[1] for f in files]))
+        files = [f for f in files if f.stem.split("-", 1)[1] in keep]
+    for f in files:
         z = np.load(f)
         y = z["labels"][:, k]
         keep = y >= 0
@@ -79,6 +84,8 @@ def main() -> int:
     data = {c: load(a.cache, c, k) for c in ("mesa", "shhs")}
     report = {"horizon_s": a.horizon, "model": a.model, "alphas": list(ALPHAS), "within": {}, "transfer": {}}
     for c, subs in data.items():
+        if c == "mesa" and not mesa_fit_allowed():
+            continue  # final mode: held-out MESA is test-only
         runs = []
         for seed in range(a.seeds):
             perm = np.random.default_rng(seed).permutation(len(subs))
@@ -96,6 +103,8 @@ def main() -> int:
             for al in runs[0]
         }
     for src, dst in (("mesa", "shhs"), ("shhs", "mesa")):
+        if src == "mesa" and not mesa_fit_allowed():
+            continue
         subs = data[src]
         perm = np.random.default_rng(0).permutation(len(subs))
         tr, ca = perm[: 2 * len(subs) // 3], perm[2 * len(subs) // 3 :]

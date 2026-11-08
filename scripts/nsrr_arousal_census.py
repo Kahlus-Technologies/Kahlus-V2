@@ -25,7 +25,9 @@ from neurotwin.adapters.nsrr import (
     LIMB_GAP_S,
     RESP_GAP_S,
     SLEEP_STAGES,
+    _subject_id_from_stem,
     classify_arousals,
+    gate_mesa_ids,
     parse_nsrr_events,
     sleep_stage_epochs,
 )
@@ -65,7 +67,11 @@ def main() -> int:
     report = {}
     for d in a.dirs:
         rows = []
-        for x in sorted(d.glob("*-nsrr.xml")):
+        xmls = sorted(d.glob("*-nsrr.xml"))
+        if xmls and xmls[0].name.startswith("mesa"):  # MESA seal applies to annotations too
+            keep = set(gate_mesa_ids([_subject_id_from_stem(x.stem.replace("-nsrr", "")) for x in xmls]))
+            xmls = [x for x in xmls if _subject_id_from_stem(x.stem.replace("-nsrr", "")) in keep]
+        for x in xmls:
             try:
                 rows.append({"subject": x.stem.replace("-nsrr", ""), **classify(parse_nsrr_events(x))})
             except ET.ParseError:
