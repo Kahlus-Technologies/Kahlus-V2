@@ -10,7 +10,7 @@ and understated the guard gaps.
 
 | File | What | Count |
 |---|---|---|
-| `mesa_dev_slice_edfs.txt` | MESA nights whose full signals were used (= `configs/data/mesa_exposed_ids.txt`) | 25 (0001 to 0035, first 25 in NSRR listing order, not random) |
+| `mesa_dev_slice_edfs.txt` | MESA nights whose full signals were used (= `configs/data/mesa_exposed_ids.txt`) | 25 (0001 to 0079, first 25 in NSRR listing order, not random) |
 | `shhs_dev_slice_edfs.txt` | SHHS-1 dev nights | 25 (200001 to 200025) |
 | `mesa_census_xmls.txt` | MESA annotation XMLs read by the census | 2,056 (all) |
 | `shhs_census_xmls.txt` | SHHS-1 annotation XMLs listed; 203583 failed to download, so 5,792 read | 5,793 |
