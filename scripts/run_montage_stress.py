@@ -24,9 +24,10 @@ import numpy as np
 from neurotwin.adapters.nsrr import (
     SLEEP_STAGES,
     discover_nsrr_recordings,
-    mesa_fit_allowed,
     event_kind,
     load_nsrr_epoch_matrix,
+    mesa_fit_allowed,
+    nsrr_root,
     parse_nsrr_events,
     sleep_stage_epochs,
 )
@@ -81,8 +82,8 @@ def score_nights(nights: list[dict], prob: list[np.ndarray], thr: float) -> dict
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mesa", type=Path, required=True)
-    ap.add_argument("--shhs", type=Path, required=True)
+    ap.add_argument("--mesa", type=Path, default=nsrr_root("mesa"))
+    ap.add_argument("--shhs", type=Path, default=nsrr_root("shhs"))
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     raw = {c: load_eeg(c, getattr(a, c)) for c in ("mesa", "shhs")}

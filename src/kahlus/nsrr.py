@@ -4,7 +4,7 @@ Credentialed download required from https://sleepdata.org/. Raw data never commi
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 import os
@@ -112,38 +112,263 @@ def _mesa_gate(recs: list[NsrrRecording]) -> list[NsrrRecording]:
     return [r for r in recs if r.subject_id in keep]
 
 
-def discover_nsrr_recordings(root: str | Path, *, dataset: str) -> list[NsrrRecording]:
-    recs = _discover(root, dataset)
-    is_mesa = dataset.lower().startswith("mesa") or any(r.edf_path.name.startswith("mesa") for r in recs)
-    return _mesa_gate(recs) if is_mesa else recs
+NSRR_COHORTS = ("mesa", "shhs")
+# NSRR ships EDFs under edfs/ and scored events under one of these, next to each other.
+_SPLIT_EDF_DIR = "edfs"
+_SPLIT_ANNOTATION_DIRS = ("annotations-events-nsrr", "annotations")
+_REPORT_EXAMPLES = 5
 
 
-def _discover(root: str | Path, dataset: str) -> list[NsrrRecording]:
-    root = Path(root)
+def nsrr_root(cohort: str) -> Path:
+    """Data root for a cohort: NSRR_<COHORT>_ROOT, else NSRR_ROOT/<cohort>, else ~/data/nsrr/<cohort>."""
+    explicit = os.environ.get(f"NSRR_{cohort.upper()}_ROOT")
+    if explicit:
+        return Path(explicit).expanduser()
+    return Path(os.environ.get("NSRR_ROOT", "~/data/nsrr")).expanduser() / cohort
+
+
+def ids_sha256(ids) -> str:
+    """SHA-256 of a participant ID list, order-free: sorted IDs, one per line."""
+    return hashlib.sha256(("\n".join(sorted(ids)) + "\n").encode()).hexdigest()
+
+
+def read_id_list(path: str | Path) -> list[str]:
+    """IDs from a text file, one per line; blank lines and # comments are ignored.
+    Each entry may be a bare subject ID (200001) or a file stem (shhs1-200001)."""
+    lines = Path(path).read_text().splitlines()
+    return [_subject_id_from_stem(s.strip()) for s in lines if s.strip() and not s.lstrip().startswith("#")]
+
+
+@dataclass
+class DiscoveryReport:
+    """What discovery found under one root, including every file it could not use."""
+
+    dataset: str
+    cohort: str | None
+    root: str
+    layout: str  # "split" (edfs/ + annotations/), "co-located" or "missing"
+    edf_dir: str | None = None
+    annotation_dir: str | None = None
+    n_edf: int = 0
+    n_xml: int = 0
+    n_xml_ignored: int = 0  # *-profusion.xml: another schema, never read
+    unmatched_edf: int = 0
+    unmatched_xml: int = 0
+    duplicate: int = 0  # files dropped because a stem or subject ID appeared more than once
+    n_matched: int = 0
+    id_filter: str | None = None
+    id_filter_sha256: str | None = None
+    n_id_filter: int = 0
+    ids_not_found: int = 0
+    n_id_filtered_out: int = 0
+    n_mesa_gated_out: int = 0
+    n_recordings: int = 0
+    recordings_sha256: str | None = None
+    examples: dict[str, list[str]] = field(default_factory=dict)  # a few stems per reject type; empty for MESA
+
+    def summary(self) -> str:
+        return (f"nsrr discovery {self.cohort or self.dataset} ({self.layout}, {self.root}): "
+                f"{self.n_edf} EDF, {self.n_xml} XML, {self.n_matched} matched, "
+                f"{self.unmatched_edf} EDF without XML, {self.unmatched_xml} XML without EDF, "
+                f"{self.duplicate} duplicate, id filter {self.n_id_filter or 'none'} "
+                f"({self.ids_not_found} not found, {self.n_id_filtered_out} filtered out), "
+                f"{self.n_mesa_gated_out} MESA-sealed, {self.n_recordings} used")
+
+    def to_json(self) -> dict:
+        return asdict(self)
+
+
+def _xml_key(p: Path) -> str | None:
+    """EDF stem this annotation belongs to, or None for a file discovery never reads."""
+    if p.name.endswith("-profusion.xml"):
+        return None
+    return p.name[: -len("-nsrr.xml")] if p.name.endswith("-nsrr.xml") else p.stem
+
+
+def _cohort_of(dataset: str, names) -> str | None:
+    for c in NSRR_COHORTS:
+        if dataset.lower().startswith(c):
+            return c
+    for n in names:
+        for c in NSRR_COHORTS:
+            if n.startswith(c):
+                return c
+    return None
+
+
+def _scan(root: Path, annotations_root: Path | None):
+    """(layout, edf_dir, annotation_dir, EDFs by key, XMLs by key, ignored XML count)."""
+    edf_dir, ann_dir = root, root
+    layout = "co-located"
+    if annotations_root is not None:
+        edf_dir, ann_dir, layout = (root / _SPLIT_EDF_DIR if (root / _SPLIT_EDF_DIR).is_dir() else root), annotations_root, "split"
+    elif (root / _SPLIT_EDF_DIR).is_dir():
+        found = next((root / d for d in _SPLIT_ANNOTATION_DIRS if (root / d).is_dir()), None)
+        if found is not None:
+            edf_dir, ann_dir, layout = root / _SPLIT_EDF_DIR, found, "split"
+    # Split trees match by stem anywhere below each dir; co-located files must share a folder.
+    def key(p: Path, stem: str) -> tuple:
+        return (stem,) if layout == "split" else (p.parent, stem)
+
+    edfs: dict[tuple, list[Path]] = {}
+    for p in sorted(edf_dir.rglob("*.edf")):
+        if not p.name.startswith("."):
+            edfs.setdefault(key(p, p.stem), []).append(p)
+    xmls: dict[tuple, list[Path]] = {}
+    ignored = 0
+    for p in sorted(ann_dir.rglob("*.xml")):
+        if p.name.startswith("."):
+            continue
+        k = _xml_key(p)
+        if k is None:
+            ignored += 1
+            continue
+        xmls.setdefault(key(p, k), []).append(p)
+    return layout, edf_dir, ann_dir, edfs, xmls, ignored
+
+
+def _pick_xml(paths: list[Path]) -> Path | None:
+    """One annotation per night: the -nsrr file wins over a plain .xml; two of a kind is ambiguous."""
+    nsrr = [p for p in paths if p.name.endswith("-nsrr.xml")]
+    pool = nsrr or paths
+    return pool[0] if len(pool) == 1 else None
+
+
+def _id_filter(cohort: str | None, ids) -> tuple[set[str] | None, str | None]:
+    if ids is not None:
+        return {_subject_id_from_stem(str(i)) for i in ids}, "argument"
+    path = os.environ.get(f"NSRR_{cohort.upper()}_IDS") if cohort else None
+    if not path:
+        return None, None
+    return set(read_id_list(path)), str(Path(path).expanduser().resolve())
+
+
+def discover_nsrr(
+    root: str | Path,
+    *,
+    dataset: str,
+    annotations_root: str | Path | None = None,
+    ids=None,
+    quiet: bool = False,
+) -> tuple[list[NsrrRecording], DiscoveryReport]:
+    """Pair every EDF with its scored-event XML and say what could not be paired.
+
+    Two layouts work. Split: ``root/edfs/`` plus ``root/annotations-events-nsrr/`` or
+    ``root/annotations/`` (or an explicit ``annotations_root``), matched by stem with
+    ``-nsrr`` removed. Co-located: EDF and XML in the same folder anywhere under root.
+    EDFs without an XML, XMLs without an EDF, and stems or subject IDs seen twice are
+    dropped and counted, never silently skipped. ``ids`` (or the file named by
+    NSRR_<COHORT>_IDS) keeps only those participants. The MESA seal runs last.
+    """
+    root = Path(root).expanduser()
     if not root.is_dir():
-        return []
-    recordings: list[NsrrRecording] = []
-    for edf in sorted(root.rglob("*.edf")):
-        if edf.name.startswith("."):
+        report = DiscoveryReport(dataset=dataset, cohort=_cohort_of(dataset, ()), root=str(root), layout="missing")
+        if not quiet:
+            print(report.summary(), file=sys.stderr)
+        return [], report
+    ann = Path(annotations_root).expanduser() if annotations_root is not None else None
+    layout, edf_dir, ann_dir, edfs, xmls, ignored = _scan(root, ann)
+    names = [p.name for ps in edfs.values() for p in ps] + [p.name for ps in xmls.values() for p in ps]
+    cohort = _cohort_of(dataset, names)
+    report = DiscoveryReport(
+        dataset=dataset, cohort=cohort, root=str(root.resolve()), layout=layout,
+        edf_dir=str(edf_dir.resolve()), annotation_dir=str(ann_dir.resolve()),
+        n_edf=sum(map(len, edfs.values())), n_xml=sum(map(len, xmls.values())), n_xml_ignored=ignored,
+    )
+    rejects: dict[str, list[str]] = {"unmatched_edf": [], "unmatched_xml": [], "duplicate": []}
+    paired = []
+    for k in sorted(set(edfs) | set(xmls), key=str):
+        e, x = edfs.get(k, []), xmls.get(k, [])
+        stem = k[-1]
+        if not x:
+            rejects["unmatched_edf"] += [stem] * len(e)
+        elif not e:
+            rejects["unmatched_xml"] += [stem] * len(x)
+        elif len(e) > 1 or _pick_xml(x) is None:
+            rejects["duplicate"] += [stem] * (len(e) + len(x))
+        else:
+            paired.append((e[0], _pick_xml(x), stem))
+    by_subject: dict[str, list] = {}
+    for edf, xml, stem in paired:
+        by_subject.setdefault(_subject_id_from_stem(stem), []).append((edf, xml, stem))
+    recs = []
+    for sid, group in sorted(by_subject.items()):
+        if len(group) > 1:  # e.g. shhs1-200001 and shhs2-200001: caches key on subject ID
+            rejects["duplicate"] += [g[2] for g in group]
             continue
-        xml_candidates = [
-            edf.with_name(edf.stem + "-nsrr.xml"),
-            edf.with_name(edf.stem + ".xml"),
-            edf.parent / f"{edf.stem}-nsrr.xml",
-        ]
-        xml_path = next((p for p in xml_candidates if p.is_file()), None)
-        if xml_path is None:
+        edf, xml, _ = group[0]
+        recs.append(NsrrRecording(edf_path=edf, xml_path=xml, subject_id=sid, dataset=dataset))
+    recs.sort(key=lambda r: str(r.edf_path))
+    report.unmatched_edf, report.unmatched_xml = len(rejects["unmatched_edf"]), len(rejects["unmatched_xml"])
+    report.duplicate = len(rejects["duplicate"])
+    report.n_matched = len(recs)
+
+    wanted, source = _id_filter(cohort, ids)
+    if wanted is not None:
+        present = {r.subject_id for r in recs}
+        report.id_filter, report.id_filter_sha256 = source, ids_sha256(wanted)
+        report.n_id_filter, report.ids_not_found = len(wanted), len(wanted - present)
+        report.n_id_filtered_out = sum(r.subject_id not in wanted for r in recs)
+        recs = [r for r in recs if r.subject_id in wanted]
+
+    is_mesa = dataset.lower().startswith("mesa") or any(n.startswith("mesa") for n in names)
+    if is_mesa:
+        before = len(recs)
+        recs = _mesa_gate(recs)
+        report.n_mesa_gated_out = before - len(recs)
+    else:  # MESA stems stay out of reports: the IDs outside the dev slice are sealed
+        report.examples = {k: v[:_REPORT_EXAMPLES] for k, v in rejects.items() if v}
+    report.n_recordings = len(recs)
+    report.recordings_sha256 = ids_sha256(r.subject_id for r in recs)
+    if not quiet:
+        print(report.summary(), file=sys.stderr)
+    return recs, report
+
+
+def discover_nsrr_recordings(root: str | Path, *, dataset: str, **kw) -> list[NsrrRecording]:
+    return discover_nsrr(root, dataset=dataset, **kw)[0]
+
+
+def discover_nsrr_annotations(root: str | Path, *, dataset: str, ids=None) -> tuple[list[tuple[str, Path]], DiscoveryReport]:
+    """(subject ID, XML) for every scored-event file, EDF or not, with the same layouts, ID filter and seal.
+
+    The census reads annotations only, so an XML whose EDF is missing still counts here.
+    """
+    root = Path(root).expanduser()
+    if not root.is_dir():
+        return [], DiscoveryReport(dataset=dataset, cohort=_cohort_of(dataset, ()), root=str(root), layout="missing")
+    layout, _, ann_dir, _, xmls, ignored = _scan(root, None)
+    names = [p.name for ps in xmls.values() for p in ps]
+    cohort = _cohort_of(dataset, names)
+    report = DiscoveryReport(dataset=dataset, cohort=cohort, root=str(root.resolve()), layout=layout,
+                             annotation_dir=str(ann_dir.resolve()), n_xml=len(names), n_xml_ignored=ignored)
+    by_subject: dict[str, list[Path]] = {}
+    for k, paths in xmls.items():
+        x = _pick_xml(paths)
+        if x is None:
+            report.duplicate += len(paths)
             continue
-        subject_id = _subject_id_from_stem(edf.stem)
-        recordings.append(
-            NsrrRecording(
-                edf_path=edf,
-                xml_path=xml_path,
-                subject_id=subject_id,
-                dataset=dataset,
-            )
-        )
-    return recordings
+        by_subject.setdefault(_subject_id_from_stem(k[-1]), []).append(x)
+    out = []
+    for sid, xs in sorted(by_subject.items()):
+        if len(xs) > 1:
+            report.duplicate += len(xs)
+        else:
+            out.append((sid, xs[0]))
+    report.n_matched = len(out)
+    wanted, source = _id_filter(cohort, ids)
+    if wanted is not None:
+        report.id_filter, report.id_filter_sha256 = source, ids_sha256(wanted)
+        report.n_id_filter, report.ids_not_found = len(wanted), len(wanted - {s for s, _ in out})
+        report.n_id_filtered_out = sum(s not in wanted for s, _ in out)
+        out = [(s, x) for s, x in out if s in wanted]
+    if dataset.lower().startswith("mesa") or any(n.startswith("mesa") for n in names):
+        keep = set(gate_mesa_ids([s for s, _ in out]))
+        report.n_mesa_gated_out = len(out) - len(keep)
+        out = [(s, x) for s, x in out if s in keep]
+    report.n_recordings = len(out)
+    report.recordings_sha256 = ids_sha256(s for s, _ in out)
+    return out, report
 
 
 def _subject_id_from_stem(stem: str) -> str:

@@ -17,16 +17,17 @@ from pathlib import Path
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import classify_arousals, discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events
+from neurotwin.adapters.nsrr import classify_arousals, discover_nsrr, load_nsrr_epoch_matrix, parse_nsrr_events
 from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs
 
 PRE_S, POST_S, BASELINE_S = 60, 15, 30
 MAX_MEDIAN_BPM = 110  # nights above this are QRS double-counting, not physiology
 
 
-def cohort_curves(root: Path, ecg_label: str) -> tuple[np.ndarray, int]:
+def cohort_curves(root: Path, ecg_label: str) -> tuple[np.ndarray, int, str]:
     curves, dropped = [], 0
-    for rec in discover_nsrr_recordings(root, dataset=root.name):
+    recs, found = discover_nsrr(root, dataset=root.name)
+    for rec in recs:
         m = load_nsrr_epoch_matrix(rec.edf_path, channel_groups={"ecg": (ecg_label,)})
         fs = m["sfreq"]
         bt, rr = beat_intervals(detect_qrs(m["epochs"]["ecg"][:, :, 0].ravel(), fs), fs)
@@ -39,7 +40,7 @@ def cohort_curves(root: Path, ecg_label: str) -> tuple[np.ndarray, int]:
             if a.clean and o > PRE_S + 10 and o + POST_S < hr.size:
                 seg = hr[o - PRE_S : o + POST_S]
                 curves.append(seg - seg[:BASELINE_S].mean())
-    return np.asarray(curves), dropped
+    return np.asarray(curves), dropped, found.cohort or root.name
 
 
 def main() -> int:
@@ -51,7 +52,7 @@ def main() -> int:
     report = {}
     for spec in a.cohorts:
         root, label = spec.rsplit(":", 1)
-        c, dropped = cohort_curves(Path(root).expanduser(), label)
+        c, dropped, name = cohort_curves(Path(root).expanduser(), label)
         mu, ci = c.mean(0), 1.96 * c.std(0) / np.sqrt(len(c))
         t = np.arange(-PRE_S, POST_S)
         # First second (scanning back from onset) where the 95% CI still excludes 0 on the rise side.
@@ -61,14 +62,14 @@ def main() -> int:
             if not rising[s]:
                 break
             lead = PRE_S - s
-        report[Path(root).name] = {
+        report[name] = {
             "n_arousals": int(len(c)),
             "nights_dropped_bad_ecg": dropped,
             "earliest_significant_rise_s_before_onset": int(lead),
             "delta_hr_bpm": {int(s): round(float(mu[i]), 3) for i, s in enumerate(t)},
             "ci95_bpm": {int(s): round(float(ci[i]), 3) for i, s in enumerate(t)},
         }
-        print(Path(root).name, len(c), "arousals; HR significantly up from", lead, "s before onset;",
+        print(name, len(c), "arousals; HR significantly up from", lead, "s before onset;",
               " ".join(f"{s:+d}s:{mu[PRE_S + s]:+.2f}" for s in (-10, -5, -3, -2, -1, 0, 2, 5)))
     (a.out / "report.json").write_text(json.dumps(report, indent=1))
     return 0

@@ -8,6 +8,9 @@ NSRR mostly does not label arousal subtype, so arousals are classified by timing
 preceding CLEAN_PRE_S seconds, i.e. a usable strictly-future forecasting target.
 
 Usage: python scripts/nsrr_arousal_census.py ~/data/nsrr/mesa ~/data/nsrr/shhs --out artifacts/nsrr_arousal_census
+
+Each dir may be co-located or split (edfs/ + annotations/). Without dirs it reads
+nsrr_root("mesa") and nsrr_root("shhs"). NSRR_<COHORT>_IDS limits the participants.
 """
 
 from __future__ import annotations
@@ -25,9 +28,9 @@ from neurotwin.adapters.nsrr import (
     LIMB_GAP_S,
     RESP_GAP_S,
     SLEEP_STAGES,
-    _subject_id_from_stem,
     classify_arousals,
-    gate_mesa_ids,
+    discover_nsrr_annotations,
+    nsrr_root,
     parse_nsrr_events,
     sleep_stage_epochs,
 )
@@ -60,24 +63,25 @@ def summarize(rows: list[dict]) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("dirs", nargs="+", type=Path)
+    ap.add_argument("dirs", nargs="*", type=Path)
     ap.add_argument("--out", type=Path, default=Path("artifacts/nsrr_arousal_census"))
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     report = {}
-    for d in a.dirs:
+    for d in a.dirs or [nsrr_root("mesa"), nsrr_root("shhs")]:
         rows = []
-        xmls = sorted(d.glob("*-nsrr.xml"))
-        if xmls and xmls[0].name.startswith("mesa"):  # MESA seal applies to annotations too
-            keep = set(gate_mesa_ids([_subject_id_from_stem(x.stem.replace("-nsrr", "")) for x in xmls]))
-            xmls = [x for x in xmls if _subject_id_from_stem(x.stem.replace("-nsrr", "")) in keep]
-        for x in xmls:
+        xmls, found = discover_nsrr_annotations(d, dataset=d.name)  # MESA seal applies to annotations too
+        name = found.cohort or d.name
+        unparseable = 0
+        for _, x in xmls:
             try:
-                rows.append({"subject": x.stem.replace("-nsrr", ""), **classify(parse_nsrr_events(x))})
+                rows.append({"subject": x.name.removesuffix(".xml").removesuffix("-nsrr"), **classify(parse_nsrr_events(x))})
             except ET.ParseError:
+                unparseable += 1
                 print(f"skip unparseable {x}", file=sys.stderr)
-        report[d.name] = summarize(rows)
-        with open(a.out / f"{d.name}_per_subject.jsonl", "w") as f:
+        report[name] = summarize(rows) | {"unparseable_xml": unparseable, "discovery": found.to_json()}
+        print(found.summary(), file=sys.stderr)
+        with open(a.out / f"{name}_per_subject.jsonl", "w") as f:
             f.writelines(json.dumps(r) + "\n" for r in rows)
     (a.out / "summary.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
