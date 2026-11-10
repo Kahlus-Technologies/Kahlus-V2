@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 
 
-from neurotwin.adapters.nsrr import discover_nsrr_recordings, mesa_fit_allowed, load_nsrr_epoch_matrix, parse_nsrr_events
+from neurotwin.adapters.nsrr import discover_nsrr, load_nsrr_epoch_matrix, mesa_fit_allowed, nsrr_root, parse_nsrr_events
+from neurotwin.adapters.nsrr_cache import NightCache
 from neurotwin.adapters.qrs_fast import causal_beats
 from neurotwin.forecastability.heart_arousal import COHORTS, anchor_labels, beat_features, fit_predict, half_night_shift, prior_features
 from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
@@ -36,14 +37,14 @@ def night(rec, cohort: str) -> dict:
 
 
 def load(cohort: str, root: Path, cache: Path) -> dict:
-    cache.mkdir(parents=True, exist_ok=True)
+    recs, found = discover_nsrr(root, dataset=cohort)
+    store = NightCache.bind(cache, cohort, producer="run_beat_warning", report=found, ids=[r.subject_id for r in recs])
     parts = []
-    for i, rec in enumerate(discover_nsrr_recordings(root, dataset=cohort)):
-        f = cache / f"{cohort}-{rec.subject_id}.npz"
-        if not f.exists():
-            np.savez(f, **night(rec, cohort))
-        z = np.load(f)
-        parts.append({k: z[k] for k in z.files} | {"subject": np.full(z["y"].shape[0], i)})
+    for i, rec in enumerate(recs):
+        if not store.has(rec.subject_id):
+            store.save(rec.subject_id, **night(rec, cohort))
+        z = store.load(rec.subject_id)
+        parts.append(z | {"subject": np.full(z["y"].shape[0], i)})
     return {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
 
 
@@ -78,8 +79,8 @@ def run(train: dict, test: dict | None, k: int, seed: int, bootstrap: str) -> di
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mesa", type=Path, required=True)
-    ap.add_argument("--shhs", type=Path, required=True)
+    ap.add_argument("--mesa", type=Path, default=nsrr_root("mesa"))
+    ap.add_argument("--shhs", type=Path, default=nsrr_root("shhs"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--bootstrap", choices=("smoke", "claim"), default="smoke", help="smoke: 300 resamples; claim: 2000")

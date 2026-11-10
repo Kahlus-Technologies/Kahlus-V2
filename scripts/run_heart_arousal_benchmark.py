@@ -16,6 +16,8 @@ with a subject-clustered bootstrap CI. AUROC and AUPRC are reported alongside.
 Usage:
   python scripts/run_heart_arousal_benchmark.py --mesa ~/data/nsrr/mesa --shhs ~/data/nsrr/shhs \
       --out artifacts/heart_arousal_dev25 [--max-nights 25] [--bootstrap claim]
+
+--mesa and --shhs default to nsrr_root() (NSRR_MESA_ROOT / NSRR_SHHS_ROOT / NSRR_ROOT).
 """
 from __future__ import annotations
 
@@ -28,7 +30,8 @@ import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import GroupKFold
 
-from neurotwin.adapters.nsrr import discover_nsrr_recordings, mesa_fit_allowed
+from neurotwin.adapters.nsrr import discover_nsrr, mesa_fit_allowed, nsrr_root
+from neurotwin.adapters.nsrr_cache import NightCache
 from neurotwin.forecastability.heart_arousal import (
     COHORTS,
     HORIZONS_S,
@@ -79,20 +82,22 @@ NORMALIZERS = {"none": lambda x: x, "night": per_night_z, "causal": causal_z}
 
 
 def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str) -> dict:
-    recs = discover_nsrr_recordings(root, dataset=name)[:max_nights]
-    cache.mkdir(parents=True, exist_ok=True)
-    nights = []
+    recs, found = discover_nsrr(root, dataset=name)
+    recs = recs[:max_nights]
+    store = NightCache.bind(cache, name, producer="run_heart_arousal_benchmark", report=found,
+                            ids=[r.subject_id for r in recs])
+    nights, skipped = [], []
     for rec in recs:
-        f = cache / f"{name}-{rec.subject_id}.npz"
-        if not f.exists():
+        if not store.has(rec.subject_id):
             try:
                 r = build_recording(rec.edf_path, rec.xml_path, **COHORTS[name])
             except ValueError as exc:
                 print(f"skip {name} {rec.subject_id}: {exc}", file=sys.stderr)
+                skipped.append(str(exc).split(" in /")[0])
                 continue
-            np.savez(f, anchors=r["anchors"], labels=r["labels"], **{f"x_{k}": v for k, v in r["blocks"].items()})
-        nights.append((rec.subject_id, np.load(f)))
-    blocks = {k[2:] for _, z in nights for k in z.files if k.startswith("x_")}
+            store.save(rec.subject_id, anchors=r["anchors"], labels=r["labels"], **{f"x_{k}": v for k, v in r["blocks"].items()})
+        nights.append((rec.subject_id, store.load(rec.subject_id)))
+    blocks = {k[2:] for _, z in nights for k in z if k.startswith("x_")}
     norm = NORMALIZERS[normalize]
 
     def night_blocks(z) -> dict[str, np.ndarray]:
@@ -108,6 +113,8 @@ def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, norm
         "labels": np.concatenate([z["labels"] for _, z in nights]),
         "x": {b: np.concatenate([n[b] for n in per_night]) for b in per_night[0]},
         "n_nights": len(nights),
+        "skipped": {reason: skipped.count(reason) for reason in sorted(set(skipped))},
+        "discovery": found.to_json(),
     }
 
 
@@ -160,22 +167,25 @@ def score(run: dict, seed: int, bootstrap: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mesa", type=Path, required=True)
-    ap.add_argument("--shhs", type=Path, required=True)
+    ap.add_argument("--mesa", type=Path, default=nsrr_root("mesa"))
+    ap.add_argument("--shhs", type=Path, default=nsrr_root("shhs"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--max-nights", type=int, default=None)
     ap.add_argument("--bootstrap", choices=("smoke", "claim"), default="smoke")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--normalize", choices=tuple(NORMALIZERS), default="none",
                     help="cardiac/EEG/PPG features: raw, z-scored over the whole night, or causal expanding z-score")
-    ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache); raw features, safe to share across runs")
+    ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache). Raw features, tied to one data root, ID list and commit; a cache made by another run is refused")
     a = ap.parse_args()
     cache = a.cache or a.out / "cache"
     data = {
         "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize),
         "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize),
     }
-    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "nights": {k: v["n_nights"] for k, v in data.items()}, "results": {}}
+    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "bootstrap": a.bootstrap,
+              "nights": {k: v["n_nights"] for k, v in data.items()},
+              "skipped": {k: v["skipped"] for k, v in data.items()},
+              "discovery": {k: v["discovery"] for k, v in data.items()}, "results": {}}
     for k, h in enumerate(HORIZONS_S):
         r = report["results"][f"h{h}"] = {}
         fit_mesa = mesa_fit_allowed()  # final mode: held-out MESA is test-only (SHHS -> MESA)

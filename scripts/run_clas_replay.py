@@ -25,12 +25,14 @@ import numpy as np
 
 from neurotwin.adapters.nsrr import (
     classify_arousals,
-    discover_nsrr_recordings,
-    mesa_fit_allowed,
+    discover_nsrr,
     load_nsrr_epoch_matrix,
+    mesa_fit_allowed,
+    nsrr_root,
     parse_nsrr_events,
     sleep_stage_epochs,
 )
+from neurotwin.adapters.nsrr_cache import NightCache
 from neurotwin.adapters.qrs_fast import causal_beats
 from neurotwin.forecastability.clas_replay import clicks_before_arousal, so_clicks
 from neurotwin.forecastability.heart_arousal import (
@@ -76,13 +78,13 @@ def night(rec, cohort: str) -> dict:
 
 
 def load(cohort: str, root: Path, cache: Path) -> list[dict]:
-    cache.mkdir(parents=True, exist_ok=True)
+    recs, found = discover_nsrr(root, dataset=cohort)
+    store = NightCache.bind(cache, cohort, producer="run_clas_replay", report=found, ids=[r.subject_id for r in recs])
     out = []
-    for rec in discover_nsrr_recordings(root, dataset=cohort):
-        f = cache / f"{cohort}-{rec.subject_id}.npz"
-        if not f.exists():
-            np.savez(f, **night(rec, cohort))
-        out.append(dict(np.load(f)))
+    for rec in recs:
+        if not store.has(rec.subject_id):
+            store.save(rec.subject_id, **night(rec, cohort))
+        out.append(store.load(rec.subject_id))
     return out
 
 
@@ -115,8 +117,8 @@ def replay(test: list[dict], train: list[dict], seed: int) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mesa", type=Path, required=True)
-    ap.add_argument("--shhs", type=Path, required=True)
+    ap.add_argument("--mesa", type=Path, default=nsrr_root("mesa"))
+    ap.add_argument("--shhs", type=Path, default=nsrr_root("shhs"))
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     data = {c: load(c, getattr(a, c), a.out / "cache") for c in ("mesa", "shhs")}

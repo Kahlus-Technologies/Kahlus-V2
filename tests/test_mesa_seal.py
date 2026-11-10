@@ -57,11 +57,20 @@ def test_cache_and_census_paths_are_sealed(tmp_path, monkeypatch):
     import nsrr_arousal_census
     import run_conformal_alarm
 
+    from neurotwin.adapters.nsrr_cache import CacheIdentityError, NightCache
+
     monkeypatch.delenv("KAHLUS_MESA", raising=False)
     exposed = sorted(nsrr.mesa_exposed_ids())[0]
+    report = nsrr.DiscoveryReport(dataset="mesa", cohort="mesa", root=str(tmp_path), layout="split")
+    cache = NightCache.bind(tmp_path / "cache", "mesa", producer="run_heart_arousal_benchmark",
+                            report=report, ids=[exposed, "9999"])
     for i in (exposed, "9999"):
+        cache.save(i, labels=np.zeros((3, 1)), x_prior=np.zeros((3, 2)))
+    assert len(run_conformal_alarm.load(tmp_path / "cache", "mesa", 0)) == 1
+    for i in (exposed, "9999"):  # a bare cache of unknown origin is refused outright
         np.savez(tmp_path / f"mesa-{i}.npz", labels=np.zeros((3, 1)), x_prior=np.zeros((3, 2)))
-    assert len(run_conformal_alarm.load(tmp_path, "mesa", 0)) == 1
+    with pytest.raises(CacheIdentityError):
+        run_conformal_alarm.load(tmp_path, "mesa", 0)
 
     mesa = tmp_path / "mesa"
     mesa.mkdir()

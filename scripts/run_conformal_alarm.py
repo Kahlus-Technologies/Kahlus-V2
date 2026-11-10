@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_heart_arousal_benchmark import MODELS, design  # noqa: E402
 
 from neurotwin.adapters.nsrr import gate_mesa_ids, mesa_fit_allowed
+from neurotwin.adapters.nsrr_cache import NightCache
 from neurotwin.forecastability.conformal import alarm_metrics, miss_rate_threshold
 from neurotwin.forecastability.heart_arousal import HORIZONS_S, STEP_S, causal_z, fit_predict
 
@@ -28,17 +29,19 @@ ALPHAS = (0.1, 0.2, 0.3, 0.5)
 
 
 def load(cache: Path, cohort: str, k: int) -> dict:
-    """Per-subject arrays from the benchmark cache, causal-normalized, label column k."""
+    """Per-subject arrays from the benchmark cache, causal-normalized, label column k.
+    Only a cache the benchmark wrote from this commit opens; each night must carry its identity."""
     subs = []
-    files = sorted(cache.glob(f"{cohort}-*.npz"))
+    store = NightCache.open(cache, cohort, producer="run_heart_arousal_benchmark")
+    ids = store.subjects()
     if cohort == "mesa":  # caches go through the same MESA seal as raw files
-        keep = set(gate_mesa_ids([f.stem.split("-", 1)[1] for f in files]))
-        files = [f for f in files if f.stem.split("-", 1)[1] in keep]
-    for f in files:
-        z = np.load(f)
+        keep = set(gate_mesa_ids(ids))
+        ids = [i for i in ids if i in keep]
+    for sid in ids:
+        z = store.load(sid)
         y = z["labels"][:, k]
         keep = y >= 0
-        x = {b[2:]: (causal_z(z[b]) if b[2:] != "prior" else z[b])[keep] for b in z.files if b.startswith("x_")}
+        x = {b[2:]: (causal_z(z[b]) if b[2:] != "prior" else z[b])[keep] for b in z if b.startswith("x_")}
         subs.append({"y": y[keep], "x": x})
     return subs
 
