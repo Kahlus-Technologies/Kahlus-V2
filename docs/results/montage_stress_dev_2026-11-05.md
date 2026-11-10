@@ -1,6 +1,6 @@
 # Low-cost montage stress test: dev-slice result (2026-11-05)
 
-Status: **dev slice, method works, baseline detector is weak**. Table regenerated after the arousal-label end fix. Refs #97. Code: `src/kahlus/montage_degrade.py`, `scripts/run_montage_stress.py`. Numbers: `artifacts/montage_stress_dev25/report.json`.
+Status: **dev slice, method works, baseline detector is weak**. Table regenerated after the arousal-label end fix. Refs #13. Code: `src/kahlus/montage_degrade.py`, `scripts/run_montage_stress.py`. Numbers: `artifacts/montage_stress_dev25/report.json`.
 
 ## Setup
 - Detector: one C4 channel, per-second features from the 3 s of EEG ending at t (relative band power, log power, plus a causal within-night z-score), one fixed gradient-boosting model. Trained on clean PSG from one cohort, tested on the other.
@@ -28,4 +28,4 @@ Median timing error of matched events is 1.5 to 2.1 s throughout.
 ## Next
 - Train with degradation augmentation and rerun the curve.
 - Stronger single-channel detector (longer context, a small CNN) so the baseline is credible.
-- Real device check: the Cerelog/ADS1299 rig from #92 recorded alongside PSG. That needs IRB before any human pilot.
+- Real device check: the Cerelog/ADS1299 rig from #10 recorded alongside PSG. That needs IRB before any human pilot.

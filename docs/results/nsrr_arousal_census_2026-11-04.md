@@ -11,12 +11,12 @@ Subtype comes from timing. Respiratory = arousal starts within 5 s of an apnea/h
 *SHHS has no leg channel.
 
 Takeaways:
-- The pre-registered primary target for #83 (clean spontaneous arousals) has enough events for subject-level inference in both cohorts.
-- For the SHHS transfer (#84), use ECG only. SHHS has no PPG, so any feature that depends on Pleth cannot transfer. Channel map: `configs/data/nsrr_common_montage.yaml`.
+- The pre-registered primary target for #1 (clean spontaneous arousals) has enough events for subject-level inference in both cohorts.
+- For the SHHS transfer (#2), use ECG only. SHHS has no PPG, so any feature that depends on Pleth cannot transfer. Channel map: `configs/data/nsrr_common_montage.yaml`.
 - Sensitivity sweep of the 5 s and 60 s windows still to do.
 
 ## First real autonomic gate (dev slice, 25 MESA + 25 SHHS, smoke bootstrap)
 - MESA h=1: residual RFS +0.0061 bits, CI [-0.0007, 0.0103], so it does not clear 0. 30,945 windows, 4,379 positives.
 - SHHS dataset-held-out: RFS +0.0048 bits (no CI in smoke mode).
-- Read: the direction is consistent with a small positive, but 25 subjects is underpowered, so this is not a claim. The real run is #83 on the cluster with claim-mode bootstrap.
+- Read: the direction is consistent with a small positive, but 25 subjects is underpowered, so this is not a claim. The real run is #1 on the cluster with claim-mode bootstrap.
 - Loader fixes needed to get here: EEG priority now picks C4 in both cohorts (MESA EEG3, SHHS EEG), MESA PPG added, montage locked per cohort (5/25 SHHS nights carry an extra AIRFLOW channel), and MESA load time dropped from 60 s to 12 s per night by reading only the picked channels.

@@ -30,7 +30,7 @@ Short answer: no definition or anchor parameter changed in response to it.
 - The forecasting anchor rule (`QUIET_S = 60` in `heart_arousal.py`, `ef1bb4c`, 18:47) copies `CLEAN_PRE_S`.
   It has stayed 60 s. `f83c029` changed how the quiet window counts events (whole duration instead of onset only). That was a code-review fix, checked on the 25 dev nights, not on census numbers.
 - What the census did inform: (1) a go decision. Counts were large enough (median 27 clean arousals
-  per MESA subject) to keep clean spontaneous arousals as the pre-registered primary target of #83. Had
+  per MESA subject) to keep clean spontaneous arousals as the pre-registered primary target of #1. Had
   counts been tiny, the target would have changed, so this is a feasibility look at all 2,056 MESA
   label sets. (2) Nothing else: the ECG-only transfer note comes from the SHHS montage (no PPG), not MESA.
 - No signals, features or model outputs from the 2,031 non-dev MESA participants were computed or seen.

@@ -1,6 +1,6 @@
 # Heart-only arousal forecasting: dev-slice result (2026-11-05)
 
-Status: **dev slice, unresolved after an independent review; result sign is not stable at n = 25 + 25**. 25 MESA + 25 SHHS1 nights. Refs #83, #84. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features give at most a small, unstable gain at 5-120 s and a small one at 1-5 s (Results 5-6). Not a claim either way. Results 1-4 are kept as the path to that conclusion.
+Status: **dev slice, unresolved after an independent review; result sign is not stable at n = 25 + 25**. 25 MESA + 25 SHHS1 nights. Refs #1, #2. Bottom line (Result 5): once a shift control removes person-identity effects, time-aligned cardiac features give at most a small, unstable gain at 5-120 s and a small one at 1-5 s (Results 5-6). Not a claim either way. Results 1-4 are kept as the path to that conclusion.
 
 ## Setup
 - Anchor every 5 s during sleep with 60 s of quiet before it (no arousal, respiratory event, limb movement, or wake). Inputs end at the anchor. The stage score of the epoch containing the anchor is never used.
@@ -88,7 +88,7 @@ After the review fixes (causal detector, so no beat can see past t) all 16 point
 ## What this changes
 - Every future comparison must include the shift control. Without it, any per-person feature looks predictive.
 - Normalization still matters for EEG transfer (Result 3 vs Result 4), but it does not create cardiac signal.
-- Heart-only forecasting at 5-120 s is unresolved on the dev slice (Result 5: 5/20 cells above zero after the review fixes, mostly cross-cohort). At 1-5 s there is a small, consistent signal (Result 6), too weak to trigger anything alone. For #96 the useful heart input is probably a veto on the next click, scored by how many pre-arousal clicks it removes per click lost, not by bits.
+- Heart-only forecasting at 5-120 s is unresolved on the dev slice (Result 5: 5/20 cells above zero after the review fixes, mostly cross-cohort). At 1-5 s there is a small, consistent signal (Result 6), too weak to trigger anything alone. For #12 the useful heart input is probably a veto on the next click, scored by how many pre-arousal clicks it removes per click lost, not by bits.
 - The prior-context baseline is strong and must be the reference in every comparison. Arousals cluster, and a model can lean on that.
 - Next: full cohorts on the cluster with claim-mode bootstrap. Scorer onset jitter (kappa about 0.56 to 0.60 for arousals) is a ceiling on any second-scale result.
 - SHHS 200002 and MESA 0010 show median HR over 110 bpm late in the night, but those hours are scored wake (MESA PPG is flat there too, so the sensors were off). Anchors never fall in wake. `good_beat_mask` drops such stretches (trailing 5-min median). With the causal detector it masks 0.34% of MESA and 0% of SHHS sleep beats (it was 0.02-0.03% with the old block mask).
