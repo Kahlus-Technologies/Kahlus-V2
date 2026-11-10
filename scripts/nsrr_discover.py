@@ -19,7 +19,7 @@ import json
 import sys
 from pathlib import Path
 
-from neurotwin.adapters.nsrr import NSRR_COHORTS, discover_nsrr, ids_sha256, nsrr_root
+from kahlus.nsrr import NSRR_COHORTS, discover_nsrr, ids_sha256, nsrr_root
 
 
 def subset(ids: list[str], limit: int, seed: int) -> list[str]:

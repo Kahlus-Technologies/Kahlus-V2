@@ -20,8 +20,8 @@ import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from scipy.signal import butter, sosfiltfilt  # noqa: E402
 
-from neurotwin.adapters.nsrr import classify_arousals, discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events  # noqa: E402
-from neurotwin.adapters.qrs_fast import causal_beats  # noqa: E402
+from kahlus.nsrr import classify_arousals, discover_nsrr_recordings, load_nsrr_epoch_matrix, parse_nsrr_events  # noqa: E402
+from kahlus.qrs_fast import causal_beats  # noqa: E402
 
 BG, INK, DIM, ACCENT = "#0B0B0C", "#F5F5F5", "#5C5C60", "#E8E8E8"
 PRE_S, POST_S = 20.0, 10.0

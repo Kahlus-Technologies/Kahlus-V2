@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.adapters.qrs_fast import CAUSAL_LATENCY_S, beat_intervals, detect_qrs, good_beat_mask, heart_rate_grid
+from kahlus.qrs_fast import CAUSAL_LATENCY_S, beat_intervals, detect_qrs, good_beat_mask, heart_rate_grid
 
 
 def synthetic_ecg(fs: float, seconds: float, bpm: float, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:

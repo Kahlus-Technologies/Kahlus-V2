@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from neurotwin.adapters import nsrr
+from kahlus import nsrr
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[1]
 
 
 def _touch(path: Path, text: str = "<PSGAnnotation><ScoredEvents/></PSGAnnotation>") -> None:

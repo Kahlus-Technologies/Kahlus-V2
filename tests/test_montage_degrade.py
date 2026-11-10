@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.montage_degrade import LEVELS, add_white_noise, degrade, detected_onsets, downsample, match_events
+from kahlus.montage_degrade import LEVELS, add_white_noise, degrade, detected_onsets, downsample, match_events
 
 
 class MontageDegradeTests(unittest.TestCase):

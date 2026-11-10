@@ -20,8 +20,9 @@ from pathlib import Path
 
 import numpy as np
 
-
-from neurotwin.adapters.nsrr import (
+from kahlus.heart_arousal import COHORTS, causal_z, eeg_features, make_model
+from kahlus.montage_degrade import LEVELS, degrade, detected_onsets, match_events
+from kahlus.nsrr import (
     SLEEP_STAGES,
     discover_nsrr_recordings,
     event_kind,
@@ -31,8 +32,6 @@ from neurotwin.adapters.nsrr import (
     parse_nsrr_events,
     sleep_stage_epochs,
 )
-from neurotwin.forecastability.heart_arousal import COHORTS, causal_z, eeg_features, make_model
-from neurotwin.forecastability.montage_degrade import LEVELS, degrade, detected_onsets, match_events
 
 TOL_S = 3.0
 WINDOW_S = 3.0

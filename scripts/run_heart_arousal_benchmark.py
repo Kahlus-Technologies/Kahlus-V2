@@ -30,9 +30,7 @@ import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import GroupKFold
 
-from neurotwin.adapters.nsrr import discover_nsrr, mesa_fit_allowed, nsrr_root
-from neurotwin.adapters.nsrr_cache import NightCache
-from neurotwin.forecastability.heart_arousal import (
+from kahlus.heart_arousal import (
     COHORTS,
     HORIZONS_S,
     build_recording,
@@ -40,7 +38,9 @@ from neurotwin.forecastability.heart_arousal import (
     fit_predict,
     half_night_shift,
 )
-from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
+from kahlus.nsrr import discover_nsrr, mesa_fit_allowed, nsrr_root
+from kahlus.nsrr_cache import NightCache
+from kahlus.rfs import cluster_bootstrap_rfs, rfs_bits
 
 MODELS = {
     "prior": ("prior",),
@@ -159,8 +159,8 @@ def score(run: dict, seed: int, bootstrap: str) -> dict:
         out[name] = {"auroc": float(roc_auc_score(y, p)), "auprc": float(average_precision_score(y, p))}
     for model, ref in COMPARISONS:
         if model in preds and ref in preds:
-            rfs = _cluster_bootstrap_rfs(y, preds[ref], preds[model], subj, seed=seed, mode=bootstrap)
-            rfs["rfs_bits"] = _rfs_bits(y, preds[ref], preds[model])
+            rfs = cluster_bootstrap_rfs(y, preds[ref], preds[model], subj, seed=seed, mode=bootstrap)
+            rfs["rfs_bits"] = rfs_bits(y, preds[ref], preds[model])
             out[f"{model} vs {ref}"] = rfs
     return out
 

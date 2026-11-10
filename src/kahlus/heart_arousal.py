@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import SLEEP_STAGES, classify_arousals, event_kind, sleep_stage_epochs
+from kahlus.nsrr import SLEEP_STAGES, classify_arousals, event_kind, sleep_stage_epochs
 
 HORIZONS_S = (5, 15, 30, 60, 120)
 STEP_S = 5.0
@@ -186,8 +186,8 @@ def eeg_features(eeg: np.ndarray, fs: float, anchors: np.ndarray, *, window_s: f
 
 def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labels: tuple[str, ...], ppg_labels: tuple[str, ...] = ()) -> dict:
     """Anchors, labels and every feature block for one night."""
-    from neurotwin.adapters.nsrr import load_nsrr_epoch_matrix, parse_nsrr_events
-    from neurotwin.adapters.qrs_fast import causal_beats
+    from kahlus.nsrr import load_nsrr_epoch_matrix, parse_nsrr_events
+    from kahlus.qrs_fast import causal_beats
 
     groups = {"ecg": ecg_labels, "eeg": eeg_labels}
     if ppg_labels:

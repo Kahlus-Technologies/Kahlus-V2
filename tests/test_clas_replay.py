@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.clas_replay import REFRACTORY_S, clicks_before_arousal, so_clicks
+from kahlus.clas_replay import REFRACTORY_S, clicks_before_arousal, so_clicks
 
 
 class ClasReplayTests(unittest.TestCase):

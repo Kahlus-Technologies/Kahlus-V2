@@ -17,8 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import classify_arousals, discover_nsrr, load_nsrr_epoch_matrix, parse_nsrr_events
-from neurotwin.adapters.qrs_fast import beat_intervals, detect_qrs
+from kahlus.nsrr import classify_arousals, discover_nsrr, load_nsrr_epoch_matrix, parse_nsrr_events
+from kahlus.qrs_fast import beat_intervals, detect_qrs
 
 PRE_S, POST_S, BASELINE_S = 60, 15, 30
 MAX_MEDIAN_BPM = 110  # nights above this are QRS double-counting, not physiology

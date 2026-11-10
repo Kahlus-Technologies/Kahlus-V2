@@ -4,7 +4,6 @@ Credentialed download required from https://sleepdata.org/. Raw data never commi
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 import os
@@ -13,6 +12,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +37,7 @@ class NsrrRecording:
     dataset: str
 
 
-_REPO = Path(__file__).resolve().parents[3]
+_REPO = Path(__file__).resolve().parents[2]
 MESA_EXPOSED_IDS = _REPO / "configs/data/mesa_exposed_ids.txt"
 MESA_FROZEN_PLAN = _REPO / "docs/results/full_cohort_plan.md"
 MESA_FINAL_LOOKS = _REPO / "docs/results/mesa_final_looks"

@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.conformal import alarm_metrics, miss_rate_threshold
+from kahlus.conformal import alarm_metrics, miss_rate_threshold
 
 
 class ConformalTests(unittest.TestCase):

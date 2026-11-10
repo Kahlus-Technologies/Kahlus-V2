@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from neurotwin.adapters import nsrr
+from kahlus import nsrr
 
 
 def _fake(root: Path, ids: list[str]) -> None:
@@ -57,7 +57,7 @@ def test_cache_and_census_paths_are_sealed(tmp_path, monkeypatch):
     import nsrr_arousal_census
     import run_conformal_alarm
 
-    from neurotwin.adapters.nsrr_cache import CacheIdentityError, NightCache
+    from kahlus.nsrr_cache import CacheIdentityError, NightCache
 
     monkeypatch.delenv("KAHLUS_MESA", raising=False)
     exposed = sorted(nsrr.mesa_exposed_ids())[0]

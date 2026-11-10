@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.heart_arousal import (
+from kahlus.heart_arousal import (
     BEAT_NAMES,
     CARDIAC_NAMES,
     EEG_NAMES,

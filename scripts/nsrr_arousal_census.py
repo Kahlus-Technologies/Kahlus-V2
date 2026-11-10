@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import (
+from kahlus.nsrr import (
     CLEAN_PRE_S,
     LIMB_GAP_S,
     RESP_GAP_S,

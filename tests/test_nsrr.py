@@ -6,17 +6,12 @@ from pathlib import Path
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import (
+from kahlus.nsrr import (
     classify_arousals,
     discover_nsrr_recordings,
     epoch_arousal_mask,
     load_nsrr_epoch_matrix,
     parse_nsrr_arousal_events,
-)
-from neurotwin.forecastability.autonomic_rfs import (
-    load_nsrr_autonomic_fixture,
-    make_autonomic_fixture,
-    run_autonomic_rfs_gate,
 )
 
 
@@ -91,56 +86,6 @@ class NsrrAdapterTests(unittest.TestCase):
             self.assertEqual(eeg.shape[0], matrix["n_epochs"])
             self.assertGreaterEqual(eeg.shape[2], 1)
             self.assertIsInstance(matrix["channels"]["eeg"], list)
-
-    def test_load_nsrr_autonomic_fixture_shape(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            try:
-                self._write_stub_nsrr_cohort(root, n_subjects=4)
-                fixture = load_nsrr_autonomic_fixture(
-                    root,
-                    dataset_code=0,
-                    dataset_name="mesa",
-                    horizons=(1, 2),
-                )
-            except RuntimeError as exc:
-                if "mne" in str(exc).lower():
-                    self.skipTest("mne not installed")
-                raise
-            self.assertEqual(fixture.eeg_epochs.ndim, 3)
-            self.assertEqual(fixture.autonomic_epochs.ndim, 3)
-            self.assertEqual(fixture.eeg_epochs.shape[1], 128)
-            self.assertGreaterEqual(fixture.autonomic_epochs.shape[2], 1)
-            self.assertGreaterEqual(len(set(fixture.subject.tolist())), 3)
-            self.assertGreater(int(np.sum(fixture.y_by_horizon[1])), 0)
-            self.assertIsNotNone(fixture.channels_used)
-
-    def test_autonomic_gate_evaluates_stub_mesa(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            out = Path(tmp) / "out"
-            try:
-                self._write_stub_nsrr_cohort(root, n_subjects=4)
-                gate = run_autonomic_rfs_gate(
-                    out,
-                    seed=2,
-                    mesa_root=root,
-                    shhs_root=None,
-                    bootstrap_mode="smoke",
-                    max_recordings=4,
-                    min_subjects=3,
-                )
-            except RuntimeError as exc:
-                if "mne" in str(exc).lower():
-                    self.skipTest("mne not installed")
-                raise
-            self.assertEqual(gate["mesa_status"], "evaluated")
-            self.assertIsNotNone(gate["mesa_real"])
-            self.assertGreaterEqual(gate["mesa_real"]["n_subjects"], 3)
-
-    def test_fixture_has_multiple_subjects(self) -> None:
-        fixture = make_autonomic_fixture(seed=2, residual_signal=True)
-        self.assertGreaterEqual(len(set(fixture.subject.tolist())), 8)
 
     def test_discover_requires_xml(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

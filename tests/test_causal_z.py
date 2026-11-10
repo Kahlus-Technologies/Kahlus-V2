@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from neurotwin.forecastability.heart_arousal import CAUSAL_WARMUP, causal_z, half_night_shift
+from kahlus.heart_arousal import CAUSAL_WARMUP, causal_z, half_night_shift
 
 
 class CausalZTests(unittest.TestCase):

@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from neurotwin.adapters.nsrr import _REPO, DiscoveryReport, ids_sha256, mesa_mode
+from kahlus.nsrr import _REPO, DiscoveryReport, ids_sha256, mesa_mode
 
 IDENTITY_KEY = "_cache_identity"
 SCHEMA = 1

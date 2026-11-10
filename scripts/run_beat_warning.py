@@ -14,12 +14,11 @@ from pathlib import Path
 
 import numpy as np
 
-
-from neurotwin.adapters.nsrr import discover_nsrr, load_nsrr_epoch_matrix, mesa_fit_allowed, nsrr_root, parse_nsrr_events
-from neurotwin.adapters.nsrr_cache import NightCache
-from neurotwin.adapters.qrs_fast import causal_beats
-from neurotwin.forecastability.heart_arousal import COHORTS, anchor_labels, beat_features, fit_predict, half_night_shift, prior_features
-from neurotwin.forecastability.m1 import _cluster_bootstrap_rfs, _rfs_bits
+from kahlus.heart_arousal import COHORTS, anchor_labels, beat_features, fit_predict, half_night_shift, prior_features
+from kahlus.nsrr import discover_nsrr, load_nsrr_epoch_matrix, mesa_fit_allowed, nsrr_root, parse_nsrr_events
+from kahlus.nsrr_cache import NightCache
+from kahlus.qrs_fast import causal_beats
+from kahlus.rfs import cluster_bootstrap_rfs, rfs_bits
 
 HORIZONS = (1, 2, 3, 5)
 STEP = 1.0
@@ -72,8 +71,8 @@ def run(train: dict, test: dict | None, k: int, seed: int, bootstrap: str) -> di
         preds = {m: fit_predict(design(train, m)[a], train["y"][a, k], design(test, m)[b], seed) for m in models}
     out = {"n": int(y.size), "pos": int(y.sum())}
     for m, ref in (("prior+beats", "prior"), ("prior+beats_shift", "prior"), ("prior+beats", "prior+beats_shift")):
-        r = _cluster_bootstrap_rfs(y, preds[ref], preds[m], subj, seed=seed, mode=bootstrap)
-        out[f"{m} vs {ref}"] = {"bits": _rfs_bits(y, preds[ref], preds[m]), "lo": r["rfs_ci_low"], "hi": r["rfs_ci_high"]}
+        r = cluster_bootstrap_rfs(y, preds[ref], preds[m], subj, seed=seed, mode=bootstrap)
+        out[f"{m} vs {ref}"] = {"bits": rfs_bits(y, preds[ref], preds[m]), "lo": r["rfs_ci_low"], "hi": r["rfs_ci_high"]}
     return out
 
 

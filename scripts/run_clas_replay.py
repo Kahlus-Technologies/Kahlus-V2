@@ -22,20 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-
-from neurotwin.adapters.nsrr import (
-    classify_arousals,
-    discover_nsrr,
-    load_nsrr_epoch_matrix,
-    mesa_fit_allowed,
-    nsrr_root,
-    parse_nsrr_events,
-    sleep_stage_epochs,
-)
-from neurotwin.adapters.nsrr_cache import NightCache
-from neurotwin.adapters.qrs_fast import causal_beats
-from neurotwin.forecastability.clas_replay import clicks_before_arousal, so_clicks
-from neurotwin.forecastability.heart_arousal import (
+from kahlus.clas_replay import clicks_before_arousal, so_clicks
+from kahlus.heart_arousal import (
     COHORTS,
     EPOCH_S,
     anchor_labels,
@@ -44,6 +32,17 @@ from neurotwin.forecastability.heart_arousal import (
     half_night_shift,
     prior_features,
 )
+from kahlus.nsrr import (
+    classify_arousals,
+    discover_nsrr,
+    load_nsrr_epoch_matrix,
+    mesa_fit_allowed,
+    nsrr_root,
+    parse_nsrr_events,
+    sleep_stage_epochs,
+)
+from kahlus.nsrr_cache import NightCache
+from kahlus.qrs_fast import causal_beats
 
 WINDOW_S = 3.0
 VETO_FRACTIONS = (0.1, 0.2, 0.3)

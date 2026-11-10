@@ -4,9 +4,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from neurotwin.adapters import nsrr_cache
-from neurotwin.adapters.nsrr import DiscoveryReport
-from neurotwin.adapters.nsrr_cache import IDENTITY_KEY, CacheIdentityError, NightCache
+from kahlus import nsrr_cache
+from kahlus.nsrr import DiscoveryReport
+from kahlus.nsrr_cache import IDENTITY_KEY, CacheIdentityError, NightCache
 
 
 def _report(root: str = "/data/shhs") -> DiscoveryReport:
