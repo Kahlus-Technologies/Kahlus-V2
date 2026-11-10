@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Kahlus: arousal forecasting and a safety veto for closed-loop sleep stimulation"
+version: 0.2.0
+authors:
+  - family-names: Patel
+    given-names: Aayushya
+  - family-names: Garg
+    given-names: Krish
+repository-code: "https://github.com/Kahlus-Technologies/Kahlus-V2"

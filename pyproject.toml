@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kahlus"
+version = "0.2.0"
+description = "Arousal forecasting and a safety veto for closed-loop sleep stimulation, on NSRR polysomnography."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Aayushya Patel" }, { name = "Krish Garg" }]
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "scikit-learn>=1.5,<1.9",
+  "mne>=1.6,<2",
+]
+
+[project.optional-dependencies]
+figures = ["matplotlib>=3.8", "pillow>=10"]
+dev = ["pytest>=8", "ruff==0.16.0", "edfio>=0.4.13"]
+
+[project.urls]
+Repository = "https://github.com/Kahlus-Technologies/Kahlus-V2"
+"Earlier work (v1)" = "https://github.com/Kahlus-Technologies/Kahlus-V1"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py310"
+
+[tool.ruff.lint]
+# Explicit rule set so the result does not drift with Ruff's defaults.
+select = ["E4", "E7", "E9", "F", "I"]

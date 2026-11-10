@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+dist/
+build/
+
+# Run outputs and feature caches: regenerate with scripts/repro_dev_slice.sh.
+artifacts/runs/
+artifacts/*/cache/
+
+# NSRR per-participant derived data is covered by the NSRR data use agreement. Never commit it.
+artifacts/nsrr_arousal_census/*_per_subject.jsonl
+*.edf
+*-nsrr.xml
