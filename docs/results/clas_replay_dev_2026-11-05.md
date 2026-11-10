@@ -1,6 +1,6 @@
 # Offline CLAS replay with an arousal-risk veto: dev-slice result (2026-11-05)
 
-Status: **dev slice, positive for a context veto, mixed for the heart**. Table regenerated after the review fixes (causal beats, trailing quality mask). Refs #96. Code: `src/neurotwin/forecastability/clas_replay.py`, `scripts/run_clas_replay.py`. Numbers: `artifacts/clas_replay_dev25/report.json`.
+Status: **dev slice, positive for a context veto, mixed for the heart**. Table regenerated after the review fixes (causal beats, trailing quality mask). Refs #96. Code: `src/kahlus/clas_replay.py`, `scripts/run_clas_replay.py`. Numbers: `artifacts/clas_replay_dev25/report.json`.
 
 ## Setup
 - Trigger: causal 0.5-4 Hz filter on C4 EEG, click 0.5 s after a trough below -40 uV, 2.5 s refractory, only where the last completed epoch was N2/N3. No click is ever played; this is a replay.

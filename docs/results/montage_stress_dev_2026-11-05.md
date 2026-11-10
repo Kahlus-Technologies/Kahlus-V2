@@ -1,6 +1,6 @@
 # Low-cost montage stress test: dev-slice result (2026-11-05)
 
-Status: **dev slice, method works, baseline detector is weak**. Table regenerated after the arousal-label end fix. Refs #97. Code: `src/neurotwin/forecastability/montage_degrade.py`, `scripts/run_montage_stress.py`. Numbers: `artifacts/montage_stress_dev25/report.json`.
+Status: **dev slice, method works, baseline detector is weak**. Table regenerated after the arousal-label end fix. Refs #97. Code: `src/kahlus/montage_degrade.py`, `scripts/run_montage_stress.py`. Numbers: `artifacts/montage_stress_dev25/report.json`.
 
 ## Setup
 - Detector: one C4 channel, per-second features from the 3 s of EEG ending at t (relative band power, log power, plus a causal within-night z-score), one fixed gradient-boosting model. Trained on clean PSG from one cohort, tested on the other.

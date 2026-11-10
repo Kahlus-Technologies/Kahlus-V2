@@ -7,7 +7,7 @@ Status: **dev slice, unresolved after an independent review; result sign is not 
 - Target: the first arousal in (t, t+h] is spontaneous. Windows where the first arousal is respiratory or limb-related are excluded.
 - Models (one fixed gradient-boosting config): prior context (time since last arousal, time since sleep onset, last completed stage), plus cardiac RR features, EEG band power, both, or PPG (MESA only).
 - Splits: subject-grouped 5-fold CV inside each cohort, plus MESA to SHHS and SHHS to MESA transfer.
-- Code: `src/neurotwin/forecastability/heart_arousal.py`, `scripts/run_heart_arousal_benchmark.py`. Raw numbers: `artifacts/heart_arousal_dev25/report.json`.
+- Code: `src/kahlus/heart_arousal.py`, `scripts/run_heart_arousal_benchmark.py`. Raw numbers: `artifacts/heart_arousal_dev25/report.json`.
 
 ## Result 1: cardiac features add nothing over prior context
 (Historical: zero-phase detector, before the review fixes. Current raw-unit numbers are in `artifacts/heart_arousal_dev25/report.json`; the conclusion is unchanged, 1/20 aligned cells above zero.)

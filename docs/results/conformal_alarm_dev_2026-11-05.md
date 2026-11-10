@@ -1,6 +1,6 @@
 # Conformal alarm budget: dev-slice result (2026-11-05)
 
-Status: **dev slice, method works, alarms are not useful yet**. Table regenerated from a fresh clone after the beat quality mask. Refs #89. Code: `src/neurotwin/forecastability/conformal.py`, `scripts/run_conformal_alarm.py`. Numbers: `artifacts/conformal_alarm_dev25/report.json`.
+Status: **dev slice, method works, alarms are not useful yet**. Table regenerated from a fresh clone after the beat quality mask. Refs #89. Code: `src/kahlus/conformal.py`, `scripts/run_conformal_alarm.py`. Numbers: `artifacts/conformal_alarm_dev25/report.json`.
 
 ## Setup
 - Forecaster: prior+cardiac at h=30 s, causal-normalized (from #83). Anchors every 5 s.

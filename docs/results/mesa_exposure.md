@@ -39,7 +39,7 @@ Short answer: no definition or anchor parameter changed in response to it.
 ## Signal-level use of the 25 MESA nights
 
 Dev-slice studies (heart forecast, beat warning, conformal, CLAS replay, montage stress, event-locked
-HR, autonomic RFS gate) trained, cross-validated and tuned on these nights, including the normalization
+HR, and the v1 autonomic RFS gate) trained, cross-validated and tuned on these nights, including the normalization
 choice (causal picked after seeing raw / night-z / causal), quiet-window and beat-mask fixes, and
 thresholds. README hero is MESA 0002. All 25 are excluded from the final evaluation.
 
@@ -51,11 +51,11 @@ thresholds. README hero is MESA 0002. All 25 are excluded from the final evaluat
   `cluster/run_p02_pretrain.py`). Launch path: `cluster/run_p02_pretrain.sbatch` (step 7 of
   `HANDOFF_KRISH.md`), run dirs `runs/p02_<size>_<arch>_<init>/`, logs `logs/p02_<jobid>.out`,
   checkpoints `latest.ckpt` / `step_*.ckpt` carrying `config` (incl. `store`) and `config_hash`.
-  No P02 run dir, log or checkpoint exists locally, and `a100-run-history.csv` records only MoABB smokes.
+  No P02 run dir, log or checkpoint exists locally, and the Kahlus-V1 `a100-run-history.csv` records only MoABB smokes.
   Whether P02 ever ran is only answerable on the cluster.
 - `sweep_mesa.log` (cluster): download verification, not tuning (Krish, 2026-11-08).
 
-## Seal (enforced in `neurotwin.adapters.nsrr.gate_mesa_ids`)
+## Seal (enforced in `kahlus.nsrr.gate_mesa_ids`)
 
 Every MESA reader goes through it: EDF discovery, the annotation census, and feature caches (`run_conformal_alarm.py`).
 - `KAHLUS_MESA=dev` (default): only the 25 exposed nights.
@@ -63,7 +63,7 @@ Every MESA reader goes through it: EDF discovery, the annotation census, and fea
   git and the tree is clean. The commit, plan sha256, argv and time are logged to `docs/results/mesa_final_looks/<script>.json`.
   A second process for the same script refuses (single use).
 - Evaluation-only in final mode: no MESA CV, no MESA-trained transfer, no MESA thresholds or calibration.
-  Scripts run SHHS-trained models on MESA only. The autonomic RFS gate (within-MESA CV) refuses outright.
+  Scripts run SHHS-trained models on MESA only. (In Kahlus-V1 the autonomic RFS gate, which cross-validates within MESA, refuses outright; it is not part of this repo.)
 - Known ceiling: the look ledger is a local file. It is committed with results so a rerun is visible in
   git, but it is not tamper-proof.
 
