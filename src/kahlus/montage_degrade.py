@@ -71,8 +71,9 @@ def detected_onsets(prob: np.ndarray, times: np.ndarray, threshold: float, min_g
     return np.asarray(kept)
 
 
-def match_events(detected: np.ndarray, truth: np.ndarray, tol_s: float) -> dict:
-    """Greedy one-to-one matching of detected to true onsets within tol_s."""
+def _match_scan(detected: np.ndarray, truth: np.ndarray, tol_s: float) -> list[float]:
+    """Each detection in order takes the nearest unused true onset (lowest index on a
+    tie) if it lies within tol_s. Scans every onset per detection."""
     used = np.zeros(truth.size, dtype=bool)
     errors = []
     for d in detected:
@@ -84,6 +85,44 @@ def match_events(detected: np.ndarray, truth: np.ndarray, tol_s: float) -> dict:
         if gap[j] <= tol_s:
             used[j] = True
             errors.append(float(d - truth[j]))
+    return errors
+
+
+def _match_window(detected: np.ndarray, truth: np.ndarray, tol_s: float) -> list[float]:
+    """_match_scan's matches, looking only at onsets in a sorted window around each
+    detection. An onset farther than tol_s never matches, so the nearest unused onset
+    matches exactly when the nearest unused onset in the window does. The window is
+    1 s wider than tol_s on each side, far more than float rounding can move a gap."""
+    order = np.argsort(truth, kind="stable")
+    ts = truth[order]
+    lo = np.searchsorted(ts, detected - (tol_s + 1.0), side="left")
+    hi = np.searchsorted(ts, detected + (tol_s + 1.0), side="right")
+    used = np.zeros(truth.size, dtype=bool)
+    errors = []
+    for d, a, b in zip(detected, lo, hi):
+        cand = order[a:b]
+        cand = cand[~used[cand]]
+        if cand.size == 0:
+            continue
+        gap = np.abs(truth[cand] - d)
+        best = gap.min()
+        if best <= tol_s:
+            j = int(cand[gap == best].min())
+            used[j] = True
+            errors.append(float(d - truth[j]))
+    return errors
+
+
+def match_events(detected: np.ndarray, truth: np.ndarray, tol_s: float) -> dict:
+    """Greedy one-to-one matching of detected to true onsets within tol_s.
+
+    Each detection, in order, takes the nearest unused true onset (lowest index on a
+    tie) if it lies within tol_s. Scanning every onset per detection grows with the
+    square of the cohort size, so finite inputs use the sorted-window search, which
+    gives the same matches.
+    """
+    finite = np.isfinite(truth).all() and np.isfinite(detected).all() and np.isfinite(tol_s)
+    errors = (_match_window if finite and truth.size else _match_scan)(detected, truth, tol_s)
     tp = len(errors)
     precision = tp / detected.size if detected.size else 0.0
     recall = tp / truth.size if truth.size else 0.0
