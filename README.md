@@ -76,6 +76,25 @@ scripts/a100_connect_back.sh --auth-key-file ~/ts-key.txt   # or: ... --auth-key
 
 It installs [Rex](https://www.superlogical.com/rex/docs/linux/remote-access) under `~/.local/bin`, runs `rex server run --tailscale` as a systemd user service (device `kahlus-a100`, change with `--hostname`), tries `loginctl enable-linger` so it survives logout and reboot, and prints the device address. No root, no open ports. If systemd user services or linger are unavailable, the script says so: it falls back to `nohup` or tells you the server stops when you log out. Add `--dry-run` to see every command first. Delete the key file afterwards. Then the OVH server runs `rex -S https://kahlus-a100.<tailnet>.ts.net ls`.
 
+**Pretrain and score a model** ([issue #11](https://github.com/Kahlus-Technologies/Kahlus-V2/issues/11)). This path needs PyTorch: `pip install -e '.[dev,train]'`.
+
+```bash
+python -m kahlus.shards nsrr --cohorts mesa shhs --out /scratch/shards --jobs 32   # once: EDF to memory-mapped patch shards
+scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # all GPUs (DDP, bf16), then the benchmark
+```
+
+Sizes are `10m`, `50m`, `200m` and `1b`. Run the same command again after a crash: training resumes from the newest checkpoint and gives the same losses as an uninterrupted run. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects and on a held-out dataset.
+
+No GPU run exists yet, and this repo reports no model number from this path. The same pipeline runs on a laptop CPU with synthetic data:
+
+```bash
+python -m kahlus.shards synthetic --out /tmp/shards
+python -m kahlus.train --shards /tmp/shards --out /tmp/run --size tiny --train-datasets synth_a --steps 200 --warmup 10 --context 8 --horizon 2 --workers 0
+python -m kahlus.forecast_bench --ckpt /tmp/run/ckpt-00000200.pt --shards /tmp/shards --test-dataset synth_b --out /tmp/run/benchmark.json
+```
+
+What is still open before a real sweep: [`docs/ROADMAP.md`](docs/ROADMAP.md#scaling-sweep-s1-what-exists-and-what-is-open).
+
 ## How it works
 
 ```mermaid
@@ -99,6 +118,8 @@ flowchart LR
 | Conformal alarms · stimulation replay · headband degradation | `src/kahlus/{conformal,clas_replay,montage_degrade}.py` |
 | Study runners | `scripts/run_*.py` |
 | Reproduce everything / prove a refactor changed nothing | `scripts/repro_dev_slice.sh` · `scripts/check_artifacts_unchanged.sh` |
+| Patch shards · model sizes · DDP training · forecast benchmark | `src/kahlus/{shards,model,train,forecast_bench}.py` |
+| One-command cluster launch for a sweep point | `scripts/train_a100.sh` |
 
 ## Scope and safety
 
