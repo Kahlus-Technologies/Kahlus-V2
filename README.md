@@ -66,6 +66,41 @@ scripts/repro_dev_slice.sh        # every study into artifacts/runs/<time>-<comm
 
 On a cluster, point `NSRR_ROOT` (or `NSRR_MESA_ROOT` / `NSRR_SHHS_ROOT`) at the full cohorts and set `JOBS` to run steps in parallel.
 
+**Pretrain and score a model** ([issue #11](https://github.com/Kahlus-Technologies/Kahlus-V2/issues/11)). This path needs PyTorch: `pip install -e '.[dev,train]'`.
+
+```bash
+python -m kahlus.shards nsrr --cohorts shhs --out /scratch/shards --jobs 32        # once: EDF to memory-mapped patch shards
+scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # 8 GPUs (DDP, bf16) on SHHS, then the benchmark
+```
+
+Sizes are `10m`, `50m`, `200m` and `1b`. The run lasts 4 passes over the training data unless `STEPS` sets another count. A count above 4 passes prints a warning. Run the same command again after a crash, and training resumes from the newest checkpoint. On CPU a resumed run gives the same losses as an uninterrupted run. That is not tested on GPU. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects. MrOS cannot be loaded and MESA is sealed, so there is no held-out dataset yet. When another dataset can be loaded, set `TEST_DATASET` to add that split.
+
+On the A100 node the launcher is the only command. It needs no conda and no sbatch:
+
+```bash
+python -m pytest tests/test_pretrain.py                                            # on any CPU first: the whole path with a tiny model
+scripts/train_a100.sh 10m /raid/scratch/$USER/shards /raid/scratch/$USER/runs      # host Python that can import torch and kahlus
+DOCKER=1 scripts/train_a100.sh 10m /raid/scratch/$USER/shards /raid/scratch/$USER/runs   # no usable Python: run in a PyTorch container
+```
+
+- It starts 8 processes with `torchrun --standalone --nproc_per_node=8`. Each process takes its GPU from `LOCAL_RANK`. Set `NGPU` and `CUDA_VISIBLE_DEVICES` to use fewer.
+- A preflight stops the run unless exactly `NGPU` GPUs are visible, and prints their names.
+- `environment.json` in the run directory records the torch, CUDA and NCCL versions, the GPU count and names, `CUDA_VISIBLE_DEVICES`, the world size, the container image and the commit, once per start.
+- `summary.md` states that the run is infrastructure validation, not a scientific claim. Send it back with `log.jsonl`, `environment.json` and `benchmark.json`. Do not send checkpoints.
+- The Docker path needs the NVIDIA container toolkit and network access (image pull, `pip install`). Nobody has run it on the node yet.
+
+Training defaults: LayerNorm on attention queries and keys (`--no-qk-norm`), a warm-up, stable, decay schedule (`--schedule cosine`) whose warm-up is capped at a tenth of the steps (`--warmup`), weight decay tied to the learning rate (`--wd-lr-product`), an effective batch derived from the data size (`--accum` overrides it), and a warning when a run reads the data more than 4 times (`--max-epochs`). Sources are in the roadmap.
+
+No GPU run exists yet, and this repo reports no model number from this path. The same pipeline runs on a laptop CPU with synthetic data:
+
+```bash
+python -m kahlus.shards synthetic --out /tmp/shards
+python -m kahlus.train --shards /tmp/shards --out /tmp/run --size tiny --train-datasets synth_a --steps 200 --warmup 10 --context 8 --horizon 2 --workers 0
+python -m kahlus.forecast_bench --ckpt /tmp/run/ckpt-00000200.pt --shards /tmp/shards --test-dataset synth_b --out /tmp/run/benchmark.json
+```
+
+What is still open before a real sweep: [`docs/ROADMAP.md`](docs/ROADMAP.md#scaling-sweep-s1-what-exists-and-what-is-open).
+
 ### Connect-back for the A100 machine
 
 Run once on the A100 machine, as your normal user, after you create a one-time [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) (the key owner is the only account that can connect):
@@ -99,6 +134,8 @@ flowchart LR
 | Conformal alarms · stimulation replay · headband degradation | `src/kahlus/{conformal,clas_replay,montage_degrade}.py` |
 | Study runners | `scripts/run_*.py` |
 | Reproduce everything / prove a refactor changed nothing | `scripts/repro_dev_slice.sh` · `scripts/check_artifacts_unchanged.sh` |
+| Patch shards · model sizes · DDP training · forecast benchmark · run record | `src/kahlus/{shards,model,train,forecast_bench,run_env}.py` |
+| One-command cluster launch for a sweep point | `scripts/train_a100.sh` |
 
 ## Scope and safety
 

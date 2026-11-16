@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 figures = ["matplotlib>=3.8", "pillow>=10"]
 dev = ["pytest>=8", "ruff==0.16.0", "edfio>=0.4.13"]
+train = ["torch>=2.2"]  # pretraining and the forecast benchmark; the studies do not need it
 
 [project.urls]
 Repository = "https://github.com/Kahlus-Technologies/Kahlus-V2"
