@@ -178,12 +178,12 @@ need_space() {
   have_kb=$(du -sk "$dir" | cut -f1)
   free_kb=$(df -Pk "$dir" | awk 'NR == 2 { print $4 }')
   ((free_kb + have_kb >= gb * 1048576)) || die "$what needs about $gb GB at $dir. It holds $((have_kb / 1048576)) GB" \
-    "and has $((free_kb / 1048576)) GB free. Set NSRR_ROOT or WORK to a larger disk, or set FETCH_NEED_GB if you know better"
+    "and has $((free_kb / 1048576)) GB free. Set WORK or NSRR_ROOT to a larger disk"
 }
 
 stage_fetch() {
   [[ -s $HOME/.nsrr_token ]] || die "no ~/.nsrr_token: put your sleepdata.org token there. It stays on this machine"
-  need_space "$NSRR_ROOT" "${FETCH_NEED_GB:-1000}" "The NSRR fetch (MESA + SHHS are about 741 GB, and the shards need room too)"
+  need_space "$NSRR_ROOT" "${FETCH_NEED_GB:-1000}" "The NSRR fetch (MESA + SHHS are about 741 GB, and the shards need room too; FETCH_NEED_GB sets the figure)"
   [[ ${SEIZEIT2:-0} != 1 ]] || need_space "$SEIZEIT2_DIR" 130 "SeizeIT2 (OpenNeuro ds005873, about 126 GB)"
   fetch_missing | while IFS= read -r f; do [[ $f == *_list.txt ]] || rm -f "$f"; done  # bad files download again
   N_SHHS_EDF=${N_SHHS_EDF:-0} "$REPO/scripts/nsrr_fetch_slice.sh"
