@@ -29,9 +29,9 @@ The run does not prove these things:
 - One of these two:
   - Python 3.10 or newer with the `venv` module (on Ubuntu: `python3-venv`), or
   - Docker with the NVIDIA container toolkit (`docker run --gpus all` must work).
-- Network access: pip installs packages, the fetch downloads from sleepdata.org, and Docker pulls its image.
+- Network access. pip installs packages, the fetch downloads from sleepdata.org, and Docker pulls its image.
 - Your own sleepdata.org token in `~/.nsrr_token`. The token stays on your machine. The package does not contain a token, and the results zip never takes one.
-- About 25 GB of free disk: about 7 GB of NSRR data, and a Python environment with CUDA PyTorch.
+- Free disk for the NSRR data (about 7 GB), the Python environment with CUDA PyTorch (several GB), and the Docker image if you use Docker.
 
 ## Run it
 
@@ -72,13 +72,13 @@ kahlus-v2/scripts/a100_handoff.sh verify preflight smoke
 
 | Stage | What it does | Output in `WORK` | Skipped when |
 | --- | --- | --- | --- |
-| `verify` | Checks `SHA256SUMS` (the package files), `HANDOFF_SHA256SUMS` (every repo file), that no file changed since checkout, and the commit | `verify.txt` | never: it always runs |
-| `preflight` | Stops unless PyTorch sees exactly 8 GPUs (`NGPU`). Records the GPUs and versions. Builds the Python environment the first time | `preflight/environment.json`, `preflight/nvidia-smi.txt` | never: it always runs |
+| `verify` | Checks `SHA256SUMS` (the package files), `HANDOFF_SHA256SUMS` (every repo file), that no file changed since checkout, and the commit | `verify.txt` | never |
+| `preflight` | Stops unless PyTorch sees exactly 8 GPUs (`NGPU`). Records the GPUs and versions. Builds the Python environment the first time | `preflight/environment.json`, `preflight/nvidia-smi.txt` | never |
 | `smoke` | Tiny model on synthetic data: 200 steps on 1 GPU and a benchmark, then 20 steps on all 8 GPUs | `smoke/run/summary.md`, `smoke/ddp/` | `smoke/run/summary.md` and `benchmark.json` exist |
 | `fetch` | Downloads all MESA and SHHS-1 annotations and 25 EDFs of each, with your `~/.nsrr_token` (about 7 GB) | `nsrr/` | every file on the fetch lists is present |
 | `devslice` | Runs every dev-slice study (`scripts/repro_dev_slice.sh`) | `devslice/handoff-<sha>/` | its `run_end.json` says `ok` |
 | `train10m` | Builds SHHS patch shards, then runs `scripts/train_a100.sh 10m`: preflight, 8-GPU training, benchmark, summary | `shards/`, `runs/kahlus-10m/` | `runs/kahlus-10m/summary.md` and `benchmark.json` exist |
-| `evidence` | Packs the results zip | `kahlus-evidence-<sha>.zip` | never: it always runs |
+| `evidence` | Packs the results zip | `kahlus-evidence-<sha>.zip` | never |
 
 A stage is skipped only if it finished for the same commit. Each stage writes its log to `logs/<stage>.log`.
 

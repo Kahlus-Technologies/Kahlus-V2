@@ -38,7 +38,7 @@ done
 if [[ -z ${WORK:-} ]]; then
   WORK=$HOME/kahlus-a100
   scratch=/raid/scratch/${USER:-$(id -un)}/kahlus-a100
-  mkdir -p "$scratch" 2>/dev/null && WORK=$scratch
+  [[ -d /raid/scratch ]] && mkdir -p "$scratch" 2>/dev/null && WORK=$scratch
 fi
 mkdir -p "$WORK/logs" "$WORK/state" "$WORK/home"
 WORK=$(cd "$WORK" && pwd -P)
@@ -123,7 +123,7 @@ stage_smoke() {
   in_env python -m kahlus.run_env summary "$d/run"
   gpus=$(in_env python -c 'import torch; print(torch.cuda.device_count())')
   if ((NGPU > 1 && gpus >= NGPU)); then  # NCCL across all GPUs, before hours of fetch and training
-    in_env torchrun --standalone --nproc_per_node="$NGPU" -m kahlus.train --shards "$d/shards" --out "$d/ddp" \
+    in_env python -m torch.distributed.run --standalone --nproc_per_node="$NGPU" -m kahlus.train --shards "$d/shards" --out "$d/ddp" \
       --size tiny --train-datasets synth_a --steps 20 --warmup 2 --context 8 --horizon 2 --workers 0 --amp bf16
     in_env python -m kahlus.run_env summary "$d/ddp"
   else

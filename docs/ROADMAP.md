@@ -73,12 +73,17 @@ operator starts with one command. In place: the 8-GPU default with `LOCAL_RANK` 
 GPU-count preflight, the Docker fallback, `environment.json` and the scope statement in `summary.md`.
 Shard `index.json` holds only dataset, subject and offsets, so it carries no label fields.
 
+The package: `scripts/make_handoff.sh` zips a pinned commit with two checksum files. In it,
+`scripts/a100_handoff.sh` runs verify, preflight, smoke, fetch, dev slice, the 10M point and the evidence zip
+(`scripts/package_evidence.sh`, no checkpoints, data or secrets). The operator guide is
+[`../README_HANDOFF.md`](../README_HANDOFF.md).
+
 Next, not built:
 
-- **Handoff package.** A zip of a pinned commit with `SHA256SUMS`, no secrets, and an offline wheel set so the
-  Docker path needs no network.
-- **Evidence bundle.** One command that packs the summary, log, environment and benchmark files, without checkpoints.
+- **Offline wheel set**, so that the first run needs no network for pip.
 - **First run on the node.** The default image `pytorch/pytorch:2.9.1-cuda12.6-cudnn9-devel` is listed on Docker Hub
   but was not pulled or run. The host driver and the persistent path `/raid/scratch` are unchecked.
+- **A 10M point with meaning.** The package trains on the 25 SHHS nights of the dev slice: about 20 optimizer
+  steps at 4 passes. A real sweep point needs the full SHHS-1 cohort on the node.
 
 The v1 roadmap (MOABB / NeuroTwin NFC) lives in [Kahlus-V1](https://github.com/Kahlus-Technologies/Kahlus-V1).

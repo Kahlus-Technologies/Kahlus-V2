@@ -83,11 +83,13 @@ scripts/train_a100.sh 10m /raid/scratch/$USER/shards /raid/scratch/$USER/runs   
 DOCKER=1 scripts/train_a100.sh 10m /raid/scratch/$USER/shards /raid/scratch/$USER/runs   # no usable Python: run in a PyTorch container
 ```
 
-- It starts 8 processes with `torchrun --standalone --nproc_per_node=8`. Each process takes its GPU from `LOCAL_RANK`. Set `NGPU` and `CUDA_VISIBLE_DEVICES` to use fewer.
+- It starts 8 processes with torchrun (`python -m torch.distributed.run --standalone --nproc_per_node=8`). Each process takes its GPU from `LOCAL_RANK`. Set `NGPU` and `CUDA_VISIBLE_DEVICES` to use fewer.
 - A preflight stops the run unless exactly `NGPU` GPUs are visible, and prints their names.
 - `environment.json` in the run directory records the torch, CUDA and NCCL versions, the GPU count and names, `CUDA_VISIBLE_DEVICES`, the world size, the container image and the commit, once per start.
 - `summary.md` states that the run is infrastructure validation, not a scientific claim. Send it back with `log.jsonl`, `environment.json` and `benchmark.json`. Do not send checkpoints.
 - The Docker path needs the NVIDIA container toolkit and network access (image pull, `pip install`). Nobody has run it on the node yet.
+
+To hand a run to the node operator, build the package with `scripts/make_handoff.sh`. It holds the staged runner `scripts/a100_handoff.sh`: verify, preflight, smoke, NSRR fetch, dev slice, the 10M point and a results zip. The operator guide is [`README_HANDOFF.md`](README_HANDOFF.md).
 
 Training defaults: LayerNorm on attention queries and keys (`--no-qk-norm`), a warm-up, stable, decay schedule (`--schedule cosine`) whose warm-up is capped at a tenth of the steps (`--warmup`), weight decay tied to the learning rate (`--wd-lr-product`), an effective batch derived from the data size (`--accum` overrides it), and a warning when a run reads the data more than 4 times (`--max-epochs`). Sources are in the roadmap.
 
