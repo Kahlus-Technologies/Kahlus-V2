@@ -83,7 +83,7 @@ python -m kahlus.shards nsrr --cohorts shhs --out /scratch/shards --jobs 32     
 scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # 8 GPUs (DDP, bf16) on SHHS, then the benchmark
 ```
 
-Sizes are `10m`, `50m`, `200m` and `1b`. The run lasts 4 passes over the training data unless `STEPS` sets another count (a count above 4 passes prints a warning). Run the same command again after a crash: training resumes from the newest checkpoint and gives the same losses as an uninterrupted run. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects. MrOS cannot be loaded and MESA is sealed, so there is no held-out dataset yet: with another loadable dataset, set `TEST_DATASET` to add that split.
+Sizes are `10m`, `50m`, `200m` and `1b`. The run lasts 4 passes over the training data unless `STEPS` sets another count. A count above 4 passes prints a warning. Run the same command again after a crash, and training resumes from the newest checkpoint. On CPU a resumed run gives the same losses as an uninterrupted run. That is not tested on GPU. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects. MrOS cannot be loaded and MESA is sealed, so there is no held-out dataset yet. When another dataset can be loaded, set `TEST_DATASET` to add that split.
 
 On the A100 node the launcher is the only command. It needs no conda and no sbatch:
 
@@ -134,7 +134,7 @@ flowchart LR
 | Conformal alarms · stimulation replay · headband degradation | `src/kahlus/{conformal,clas_replay,montage_degrade}.py` |
 | Study runners | `scripts/run_*.py` |
 | Reproduce everything / prove a refactor changed nothing | `scripts/repro_dev_slice.sh` · `scripts/check_artifacts_unchanged.sh` |
-| Patch shards · model sizes · DDP training · forecast benchmark | `src/kahlus/{shards,model,train,forecast_bench}.py` |
+| Patch shards · model sizes · DDP training · forecast benchmark · run record | `src/kahlus/{shards,model,train,forecast_bench,run_env}.py` |
 | One-command cluster launch for a sweep point | `scripts/train_a100.sh` |
 
 ## Scope and safety

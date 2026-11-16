@@ -19,7 +19,7 @@ dev-slice numbers are never claims, and MESA is touched once.
 ## Scaling sweep (S1): what exists and what is open
 
 Exists, with tests that run on CPU: memory-mapped patch shards (`kahlus.shards`), the size presets
-(`kahlus.model`), DDP training with bf16, gradient accumulation, periodic checkpoints and exact resume
+(`kahlus.model`), DDP training with bf16, gradient accumulation, periodic checkpoints and a resume that is exact on CPU
 (`kahlus.train`), the benchmark harness (`kahlus.forecast_bench`) and the launcher
 (`scripts/train_a100.sh`). Run instructions are in the README.
 
@@ -46,7 +46,7 @@ Each choice has a flag in `kahlus.train` and a CPU test. The arXiv IDs come from
 |---|---|---|
 | LayerNorm on attention queries and keys, to keep attention logits bounded | `--qk-norm` (on) | arXiv 2309.14322, 2410.16682 |
 | Warm-up, stable, decay learning-rate schedule; cosine stays available | `--schedule wsd` | arXiv 2410.05192 |
-| Weight decay tuned together with the learning rate: decay = product / learning rate | `--wd-lr-product 1.5e-5` | arXiv 2510.19093 says to tune them together. The fixed-product rule is ours |
+| Weight decay tuned together with the learning rate. Decay is the product divided by the learning rate | `--wd-lr-product 1.5e-5` | arXiv 2510.19093 says to tune them together. The fixed-product rule is ours |
 | Effective batch from the data size, not the model size | `--accum` (derived) | arXiv 2410.21676 gives the direction. The 0.1%-of-windows rule is ours |
 | Warning when a run reads the training data more than 4 times | `--max-epochs 4` | arXiv 2305.16264 |
 | Subject-held-out splits | always on | unchanged |
@@ -58,13 +58,13 @@ Not applied:
 
 Later pilots, not in the code:
 
-- **Muon or SOAP optimizer.** Plan for a 1.1x to 1.4x speedup, not 2x: about 1.1x at 1.2B parameters
-  (arXiv 2509.02046), about 1.4x with well-transferred hyperparameters (arXiv 2512.05620).
+- **Muon or SOAP optimizer.** Plan for a 1.1x to 1.4x speedup, not 2x. The speedup was about 1.1x at 1.2B parameters
+  (arXiv 2509.02046) and about 1.4x with well-transferred hyperparameters (arXiv 2512.05620).
 - **FP8.** Only after bf16 works on the node. It matched bf16 with up to 34% more throughput, but needed
   Smooth-SwiGLU to stay stable (arXiv 2409.12517).
 
-Read the curve with care: scaling-law fits depend on warm-up, compute accounting and optimizer tuning
-(arXiv 2406.19146), and EEG foundation models do not yet show clean scaling (arXiv 2507.11783).
+Two cautions for the scaling curve. Scaling-law fits depend on warm-up, compute accounting and optimizer tuning
+(arXiv 2406.19146). EEG foundation models do not yet show clean scaling (arXiv 2507.11783).
 
 ## Handoff to the A100 node
 

@@ -37,20 +37,19 @@ def is_tuning(night: dict) -> bool:
     return int(hashlib.sha256(f"tune:{night['dataset']}:{night['subject']}".encode()).hexdigest(), 16) % TUNE_MOD == 0
 
 
-def eval_windows(shards: ShardSet, nights: list[dict], *, context: int, horizon: int, n: int, seed: int) -> dict:
-    """``n`` windows as float32 arrays: aligned ``context``, ``shifted`` context (half a night away) and
-    ``target``, plus the subject of each window."""
+def eval_windows(shards: ShardSet, nights: list[dict], *, context: int, horizon: int, n: int, seed: int, shift: bool = False) -> dict:
+    """``n`` windows as float32 arrays: ``context``, ``target`` and the subject of each window. With ``shift``
+    also ``shifted``, the context from half a night away. Only scored windows need it."""
     length = context + horizon
     nights = [x for x in nights if x["n"] >= 4 * length]  # room for a shifted context that cannot overlap the target
-    ctx, shifted, target, subject = [], [], [], []
-    for night, start in Windows(shards, nights, length).draw(np.random.default_rng(seed), n):
-        full = shards.read(night, start, length)
-        ctx.append(full[:context])
-        target.append(full[context:])
-        shifted.append(shards.read(night, (start + night["n"] // 2) % (night["n"] - length + 1), context))
-        subject.append(f"{night['dataset']}:{night['subject']}")
-    return {"context": np.stack(ctx).astype(np.float32), "shifted": np.stack(shifted).astype(np.float32),
-            "target": np.stack(target).astype(np.float32), "subject": np.asarray(subject)}
+    drawn = Windows(shards, nights, length).draw(np.random.default_rng(seed), n)
+    full = np.stack([shards.read(night, start, length) for night, start in drawn]).astype(np.float32)
+    out = {"context": full[:, :context], "target": full[:, context:],
+           "subject": np.asarray([f"{night['dataset']}:{night['subject']}" for night, _ in drawn])}
+    if shift:
+        out["shifted"] = np.stack([shards.read(night, (start + night["n"] // 2) % (night["n"] - length + 1), context)
+                                   for night, start in drawn]).astype(np.float32)
+    return out
 
 
 # Forecasters. Each builder takes (fit, tune, args) and returns ``predict(context) -> (n, horizon, channels, patch_len)``.
@@ -218,10 +217,10 @@ def main(argv=None) -> dict:
     fit = eval_windows(shards, [n for n in fit_nights if not is_tuning(n)], **cut, n=args.n_fit, seed=args.seed)
     tune = eval_windows(shards, [n for n in fit_nights if is_tuning(n)], **cut, n=args.n_eval, seed=args.seed + 1)
     splits = {
-        "subject_held_out": eval_windows(shards, shards.select(train_datasets, heldout=True), **cut, n=args.n_eval, seed=args.seed + 2),
+        "subject_held_out": eval_windows(shards, shards.select(train_datasets, heldout=True), **cut, n=args.n_eval, seed=args.seed + 2, shift=True),
     }
     if args.test_dataset:
-        splits["dataset_held_out"] = eval_windows(shards, shards.select([args.test_dataset]), **cut, n=args.n_eval, seed=args.seed + 3)
+        splits["dataset_held_out"] = eval_windows(shards, shards.select([args.test_dataset]), **cut, n=args.n_eval, seed=args.seed + 3, shift=True)
     n_boot = 2000 if args.bootstrap == "claim" else 300
     report = {
         "task": f"forecast {cut['horizon']} s from {cut['context']} s, strictly future",

@@ -3,10 +3,12 @@
     python -m kahlus.train --shards DIR --out RUN --size 10m --train-datasets shhs
     torchrun --standalone --nproc-per-node=8 -m kahlus.train ...      # DDP, one process per GPU
 
-Rerun the same command to resume: the run continues from the newest checkpoint in ``--out`` and gives
-the same losses as a run that was never stopped. That holds because nothing depends on hidden state:
-micro-batch i of rank r is a pure function of ``(seed, r, i)``, the learning rate is a pure function of
-the step, the model has no dropout, and the checkpoint holds the model, the optimizer and the step.
+Rerun the same command to resume. The run continues from the newest checkpoint in ``--out``. On CPU a
+resumed run gives the same losses as a run that was never stopped, and tests prove it with 1 and 2
+processes. On GPU this is not tested, because bf16 kernels and NCCL reduction may not be bit-deterministic.
+Nothing in the run depends on hidden state. Micro-batch i of rank r is a pure function of ``(seed, r, i)``,
+the learning rate is a pure function of the step, the model has no dropout, and the checkpoint holds the
+model, the optimizer and the step.
 """
 from __future__ import annotations
 
@@ -64,6 +66,19 @@ def batch_for_data(n_windows: int) -> int:
     else (arXiv 2410.21676: the useful batch size grows with data size, not with model size).
     The rule is ours: the largest power of two up to 0.1% of the windows, kept inside [64, 4096]."""
     return min(4096, max(64, 2 ** int(math.log2(max(1.0, n_windows / 1000)))))
+
+
+def plan_run(args: argparse.Namespace, n_patches: int, world: int) -> float:
+    """Fill ``--accum``, ``--weight-decay`` and ``--steps`` where they are unset, from the size of the training
+    data. Return how many times the run reads that data."""
+    if args.accum is None:
+        args.accum = max(1, math.ceil(batch_for_data(n_patches // args.context) / (args.batch * world)))
+    if args.weight_decay is None:
+        args.weight_decay = args.wd_lr_product / args.lr
+    patches_per_step = args.accum * args.batch * world * args.context
+    if args.steps is None:
+        args.steps = max(1, int(args.max_epochs * n_patches / patches_per_step))
+    return args.steps * patches_per_step / n_patches
 
 
 def latest_checkpoint(out: Path) -> Path | None:
@@ -127,14 +142,7 @@ def main(argv=None) -> None:
     n_patches = sum(n["n"] for n in train_nights)
     if not n_patches:
         raise SystemExit(f"--train-datasets {args.train_datasets} have no subject outside the held-out set in {args.shards}")
-    if args.accum is None:
-        args.accum = max(1, math.ceil(batch_for_data(n_patches // args.context) / (args.batch * world)))
-    if args.weight_decay is None:
-        args.weight_decay = args.wd_lr_product / args.lr
-    patches_per_step = args.accum * args.batch * world * args.context
-    if args.steps is None:
-        args.steps = max(1, int(args.max_epochs * n_patches / patches_per_step))
-    epochs = args.steps * patches_per_step / n_patches
+    epochs = plan_run(args, n_patches, world)
     torch.manual_seed(args.seed)  # every rank builds the same initial weights
     model = KahlusPatchModel(cfg).to(device)
     decay = [p for p in model.parameters() if p.ndim >= 2]
