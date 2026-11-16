@@ -20,7 +20,7 @@ The run does not prove these things:
 
 - It makes no scientific claim. The dev-slice numbers come from 25 nights per cohort. The 10M point is one model size, scored only on held-out SHHS subjects. `summary.md` calls the run infrastructure validation.
 - It does not test the 50M, 200M and 1B sizes.
-- It does not show whether a resumed GPU run gives the same losses as an uninterrupted run. That is tested on CPU only.
+- It does not show whether a resumed GPU run gives the same losses as an uninterrupted run. Only CPU tests check that.
 
 ## The machine
 
@@ -34,7 +34,7 @@ The captain gave these facts about the Chapman node. Nobody on the Kahlus side h
 
 All NSRR PSG cohorts together are about 5.2 TB, and MESA + SHHS alone are about 741 GB. This run fetches less than MESA + SHHS: all annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF. The fetch stage needs 1000 GB free (`FETCH_NEED_GB`), less what `NSRR_ROOT` holds already, so the SHHS-1 shards fit too. If the disk has less, the fetch stops before it downloads and tells you how much is free. The preflight writes the free disk at `WORK` and `NSRR_ROOT` to `preflight/disk.txt`.
 
-SeizeIT2 is optional. It is a public seizure dataset (OpenNeuro `ds005873`, 125.9 GB in 24,877 files on 2026-11-16). With `SEIZEIT2=1`, the fetch stage also downloads it to `WORK/seizeit2` from the public OpenNeuro S3 bucket (`aws s3 sync --no-sign-request`). It needs no account. The script installs the AWS CLI in its Python environment if it is not there, and it stops first unless `WORK` has 130 GB free. No stage reads SeizeIT2 yet: the download only puts it on the node for later work.
+SeizeIT2 is optional. It is a public seizure dataset (OpenNeuro `ds005873`, 125.9 GB in 24,877 files on 2026-11-16). With `SEIZEIT2=1`, the fetch stage also downloads it to `WORK/seizeit2` from the public OpenNeuro S3 bucket (`aws s3 sync --no-sign-request`). It needs no account. The script installs the AWS CLI in its Python environment if it is not there, and it stops first unless `WORK` has 130 GB free. No stage reads SeizeIT2 yet. The download only puts it on the node for later work.
 
 With 640 GB of RAM, the shard build runs 32 processes, and the page cache holds the memory-mapped SHHS-1 shards.
 
@@ -46,7 +46,7 @@ With 640 GB of RAM, the shard build runs 32 processes, and the page cache holds 
   - Docker with the NVIDIA container toolkit (`docker run --gpus all` must work).
 - Network access. pip installs packages, the fetch downloads from sleepdata.org, and Docker pulls its image.
 - Your own sleepdata.org token in `~/.nsrr_token`. The token stays on your machine. The package does not contain a token, and the results zip never takes one.
-- Free disk at `WORK`: see [The machine](#the-machine). The Python environment with CUDA PyTorch and the Docker image need several GB more.
+- Free disk at `WORK`, as [The machine](#the-machine) gives. The Python environment with CUDA PyTorch and the Docker image need several GB more.
 
 ## Run it
 
@@ -80,7 +80,7 @@ Keep `kahlus-v2` in the unpacked folder, beside `SHA256SUMS` and `COMMIT_HASH.tx
 
 Outputs go to `WORK`. The default is `/raid/scratch/$USER/kahlus-a100` if `/raid/scratch` exists, else `~/kahlus-a100`. To change it, set `WORK=/some/path` before the command. `WORK` must be a folder of its own, not your home folder.
 
-The fetch is the longest stage: it downloads several hundred GB. If it stops, run the same command again. It downloads only the files that are still missing.
+The fetch is the longest stage. It downloads several hundred GB. If it stops, run the same command again. It downloads only the files that are still missing.
 
 ## The stages
 
