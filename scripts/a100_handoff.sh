@@ -188,7 +188,7 @@ stage_devslice() {
   # repro_dev_slice.sh exactly that as its SHHS root, even when NSRR_ROOT holds the whole cohort.
   rm -rf "$view"
   mkdir -p "$view"
-  find "$NSRR_ROOT/shhs" -maxdepth 1 -name '*.xml' -exec ln -s {} "$view/" +
+  find "$NSRR_ROOT/shhs" -maxdepth 1 -name '*.xml' -exec ln -s -t "$view" {} +
   if [[ -s $list ]]; then sed 's#.*/##' "$list"; else find "$NSRR_ROOT/shhs" -maxdepth 1 -name '*.edf' -printf '%f\n' | sort; fi |
     sed -n "1,${N_EDF:-25}p" | while IFS= read -r f; do ln -s "$NSRR_ROOT/shhs/$f" "$view/$f"; done
   [[ ! -e $DEVSLICE ]] || mv "$DEVSLICE" "$DEVSLICE.failed-$(date +%s)"  # repro_dev_slice.sh needs a new directory
