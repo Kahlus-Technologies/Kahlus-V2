@@ -95,7 +95,14 @@ def test_handoff_package_verifies_and_the_verify_stage_catches_a_changed_file(tm
     bad = verify()
     assert bad.returncode != 0 and "HANDOFF_SHA256SUMS" in bad.stdout + bad.stderr
     train.write_bytes(original)
+    (pkg / tarball).unlink()  # deleting the tarball after unpacking is allowed
     assert verify().returncode == 0
+
+    stray = pkg / "kahlus-v2/src/sklearn.py"  # an added file would shadow a library
+    stray.write_text("raise SystemExit\n")
+    bad = verify()
+    assert bad.returncode != 0 and "src/sklearn.py" in bad.stdout + bad.stderr
+    stray.unlink()
 
     (pkg / "README_HANDOFF.md").write_text("changed\n")
     bad = verify()

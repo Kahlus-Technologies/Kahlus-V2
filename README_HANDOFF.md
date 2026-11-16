@@ -57,9 +57,10 @@ With 640 GB of RAM, the shard build runs 32 processes, and the page cache holds 
    tar xzf kahlus-v2-<sha>.tar.gz
    ```
 
-2. Run every stage:
+2. Run every stage. The run takes many hours, so start it in `tmux` or `screen`, or with `nohup`, so that a dropped SSH session does not stop it:
 
    ```bash
+   tmux new -s kahlus
    kahlus-v2/scripts/a100_handoff.sh
    ```
 
@@ -71,7 +72,9 @@ With 640 GB of RAM, the shard build runs 32 processes, and the page cache holds 
 
 3. Send back the file that the last line names: `kahlus-evidence-<sha>.zip`.
 
-If a stage fails, the script still writes the evidence zip and tells you its path. Send it back as it is. After a fix, run the same command again. The script skips every stage whose outputs already verify.
+If a stage fails or you stop the run (Ctrl-C), the script still writes the evidence zip and tells you its path. Send it back as it is. After a fix, run the same command again. The script skips every stage whose outputs already verify.
+
+Keep `kahlus-v2` in the unpacked folder, beside `SHA256SUMS` and `COMMIT_HASH.txt`, and do not add or change files in it. The `verify` stage stops if you do. You can delete the tarball after you unpack it.
 
 Outputs go to `WORK`. The default is `/raid/scratch/$USER/kahlus-a100` if `/raid/scratch` exists, else `~/kahlus-a100`. To change it, set `WORK=/some/path` before the command. `WORK` must be a folder of its own, not your home folder.
 
@@ -90,9 +93,9 @@ kahlus-v2/scripts/a100_handoff.sh verify preflight smoke
 | `verify` | Checks `SHA256SUMS` (the package files), `HANDOFF_SHA256SUMS` (every repo file), that no file changed since checkout, and the commit | `verify.txt` | never |
 | `preflight` | Stops unless PyTorch sees exactly 8 GPUs (`NGPU`). Records the GPUs and versions. Builds the Python environment the first time | `preflight/environment.json`, `preflight/nvidia-smi.txt` | never |
 | `smoke` | Tiny model on synthetic data: 200 steps on 1 GPU and a benchmark, then 20 steps on all 8 GPUs | `smoke/run/summary.md`, `smoke/ddp/` | `smoke/run/summary.md` and `benchmark.json` exist |
-| `fetch` | Downloads all MESA and SHHS-1 annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF, with your `~/.nsrr_token`. Stops first if the disk is too small | `nsrr/` | every file on the fetch lists is present |
+| `fetch` | Downloads all MESA and SHHS-1 annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF, with your `~/.nsrr_token`. Stops first if the disk is too small | `nsrr/` | every file on the fetch lists is present and starts like an EDF or an NSRR XML file |
 | `devslice` | Runs every dev-slice study (`scripts/repro_dev_slice.sh`) on the 25 MESA EDFs and the first 25 SHHS-1 EDFs | `devslice/handoff-<sha>/` | its `run_end.json` says `ok` |
-| `train10m` | Builds patch shards of every SHHS-1 night, then runs `scripts/train_a100.sh 10m`: preflight, 8-GPU training (about 4,500 optimizer steps by our estimate), benchmark, summary | `shards/`, `runs/kahlus-10m/` | `runs/kahlus-10m/summary.md` and `benchmark.json` exist |
+| `train10m` | Builds patch shards of every SHHS-1 night, then runs `scripts/train_a100.sh 10m`: preflight, 8-GPU training (about 4,500 optimizer steps by our estimate), benchmark, summary | `shards/<sha>/`, `runs/<sha>/kahlus-10m/` | `runs/<sha>/kahlus-10m/summary.md` and `benchmark.json` exist |
 | `evidence` | Packs the results zip | `kahlus-evidence-<sha>.zip` | never |
 
 A stage is skipped only if it finished for the same commit. Each stage writes its log to `logs/<stage>.log`.
@@ -136,7 +139,7 @@ The script installs Rex in `~/.local/bin` and runs it as your user. It needs no 
 The evidence zip contains only text records from the run outputs in `WORK`:
 
 - `verify.txt`, `preflight/environment.json`, `preflight/disk.txt`, `preflight/nvidia-smi.txt`
-- `smoke/run/` and `runs/kahlus-10m/`: `summary.md`, `log.jsonl`, `environment.json`, `benchmark.json`
+- `smoke/run/` and `runs/<sha>/kahlus-10m/`: `summary.md`, `log.jsonl`, `environment.json`, `benchmark.json`
 - `devslice/handoff-<sha>/`: `run.json`, `run_end.json`, `steps.tsv`, the study results, the discovery manifests and the logs
 - `logs/<stage>.log` for each stage
 - `MANIFEST.sha256`, with the SHA-256 of each file in the zip

@@ -27,8 +27,9 @@
 #   DOCKER=1   run the Python stages in DOCKER_IMAGE (default pytorch/pytorch:2.9.1-cuda12.6-cudnn9-devel)
 #   The called scripts read their own settings: BOOTSTRAP, JOBS, THREADS (devslice), STEPS, WORKERS (train10m).
 set -euo pipefail
+unset CDPATH
 
-REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
+REPO=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
 PKG=$(dirname "$REPO")
 STAGES=(verify preflight smoke fetch devslice train10m evidence)
 die() { echo "a100_handoff: $*" >&2; exit 1; }
@@ -47,7 +48,9 @@ fi
 mkdir -p "$WORK/logs" "$WORK/state" "$WORK/home"
 WORK=$(cd "$WORK" && pwd -P)
 [[ $WORK != / && "$(cd "$HOME" && pwd -P)/" != "$WORK"/* ]] || die "WORK=$WORK holds your home folder: use a folder of its own"
-export NSRR_ROOT=${NSRR_ROOT:-$WORK/nsrr}
+mkdir -p "${NSRR_ROOT:=$WORK/nsrr}"
+NSRR_ROOT=$(cd "$NSRR_ROOT" && pwd -P)  # repro_dev_slice.sh and docker -v need an absolute path
+export NSRR_ROOT
 export NGPU=${NGPU:-8}
 DOCKER=${DOCKER:-0}
 IMAGE=${DOCKER_IMAGE:-pytorch/pytorch:2.9.1-cuda12.6-cudnn9-devel}
@@ -55,7 +58,8 @@ if [[ $DOCKER == 1 ]]; then VENV=$WORK/venv-docker; else VENV=$WORK/venv-host; f
 COMMIT=$(git -C "$REPO" rev-parse HEAD 2>/dev/null || cat "$PKG/COMMIT_HASH.txt" 2>/dev/null || echo unknown)
 SHORT=${COMMIT:0:12}
 DEVSLICE=$WORK/devslice/handoff-$SHORT
-RUN10M=$WORK/runs/kahlus-10m
+SHARDS=$WORK/shards/$SHORT  # per commit: a new commit never reuses another commit's shards or checkpoints
+RUN10M=$WORK/runs/$SHORT/kahlus-10m
 EVIDENCE=$WORK/kahlus-evidence-$SHORT.zip
 
 # Runs a command with the stage Python first on PATH, on this host or in the container.
@@ -84,9 +88,13 @@ ensure_env() {
 }
 
 stage_verify() {
+  local changed
   if [[ -f $PKG/SHA256SUMS && -f $PKG/COMMIT_HASH.txt ]]; then
-    (cd "$PKG" && sha256sum --check --strict --quiet SHA256SUMS) || die "package files do not match $PKG/SHA256SUMS"
+    # --ignore-missing: deleting the tarball after unpacking is fine. A changed file still fails.
+    (cd "$PKG" && sha256sum --check --strict --quiet --ignore-missing SHA256SUMS) || die "package files do not match $PKG/SHA256SUMS"
     echo "ok: package files match $PKG/SHA256SUMS"
+  elif [[ -f $REPO/HANDOFF_SHA256SUMS ]]; then
+    die "keep kahlus-v2 in the unpacked package folder, beside SHA256SUMS and COMMIT_HASH.txt"
   fi
   if [[ -f $REPO/HANDOFF_SHA256SUMS ]]; then
     (cd "$REPO" && sha256sum --check --strict --quiet HANDOFF_SHA256SUMS) || die "repo files do not match HANDOFF_SHA256SUMS"
@@ -95,12 +103,15 @@ stage_verify() {
     echo "no HANDOFF_SHA256SUMS: this is a git checkout, not the handoff package"
   fi
   if git -C "$REPO" rev-parse HEAD >/dev/null 2>&1; then
-    [[ -z $(git -C "$REPO" status --porcelain --untracked-files=no) ]] || die "tracked files changed: see git -C $REPO status"
+    # Untracked files count too: a stray src/sklearn.py would change what runs.
+    changed=$(git -C "$REPO" status --porcelain | grep -vx '?? HANDOFF_SHA256SUMS' || true)
+    [[ -z $changed ]] || die "files changed or added since checkout:"$'\n'"$changed"
     if [[ -f $PKG/COMMIT_HASH.txt && $(<"$PKG/COMMIT_HASH.txt") != "$COMMIT" ]]; then
       die "checkout is at $COMMIT, but COMMIT_HASH.txt says $(<"$PKG/COMMIT_HASH.txt")"
     fi
     echo "ok: clean checkout"
   fi
+  [[ $COMMIT != unknown ]] || die "cannot tell the commit: no git checkout and no COMMIT_HASH.txt"
   printf 'commit %s\nverified %s\n' "$COMMIT" "$(date -u +%FT%TZ)" | tee "$WORK/verify.txt"
 }
 
@@ -137,29 +148,36 @@ stage_smoke() {
   fi
 }
 
-# Prints each NSRR file on the fetch lists that is missing or empty.
+# Prints each NSRR file on the fetch lists that is missing, empty or not what its name says (for
+# example an HTML error page saved as an EDF). An EDF starts with "0" and 7 spaces.
 fetch_missing() {
-  local ds list f
+  local ds list f path
   for ds in mesa shhs; do
     for list in "$NSRR_ROOT/$ds/xml_list.txt" "$NSRR_ROOT/$ds/edf_list.txt"; do
       [[ -s $list ]] || { echo "$list"; continue; }
-      while IFS= read -r f; do [[ -s $NSRR_ROOT/$ds/${f##*/} ]] || echo "$NSRR_ROOT/$ds/${f##*/}"; done < "$list"
+      while IFS= read -r f; do
+        path=$NSRR_ROOT/$ds/${f##*/}
+        case $path in
+          *.edf) [[ -s $path && $(head -c 8 "$path") == "0       " ]] || echo "$path" ;;
+          *) [[ -s $path && $(head -c 512 "$path") == *PSGAnnotation* ]] || echo "$path" ;;
+        esac
+      done < "$list"
     done
   done
 }
 done_fetch() { [[ -z $(fetch_missing) ]]; }
 stage_fetch() {
   [[ -s $HOME/.nsrr_token ]] || die "no ~/.nsrr_token: put your sleepdata.org token there. It stays on this machine"
-  mkdir -p "$NSRR_ROOT"
   local need_gb=${FETCH_NEED_GB:-1000} have_kb free_kb missing
   have_kb=$(du -sk "$NSRR_ROOT" | cut -f1)
   free_kb=$(df -Pk "$NSRR_ROOT" | awk 'NR == 2 { print $4 }')
   ((free_kb + have_kb >= need_gb * 1048576)) || die "the fetch needs about $need_gb GB at $NSRR_ROOT" \
     "(MESA + SHHS are about 741 GB, and the shards need room too). It holds $((have_kb / 1048576)) GB and has" \
     "$((free_kb / 1048576)) GB free. Set NSRR_ROOT or WORK to a larger disk, or set FETCH_NEED_GB if you know better"
+  fetch_missing | while IFS= read -r f; do [[ $f == *_list.txt ]] || rm -f "$f"; done  # bad files download again
   N_SHHS_EDF=${N_SHHS_EDF:-0} "$REPO/scripts/nsrr_fetch_slice.sh"
   missing=$(fetch_missing | wc -l)
-  ((missing == 0)) || die "$missing NSRR files are missing after the fetch: run again to retry them"
+  ((missing == 0)) || die "$missing NSRR files are missing or not valid after the fetch: run again to retry them"
 }
 
 done_devslice() { grep -q '"status": "ok"' "$DEVSLICE/run_end.json" 2>/dev/null; }
@@ -180,12 +198,12 @@ stage_devslice() {
 done_train10m() { [[ -s $RUN10M/summary.md && -s $RUN10M/benchmark.json ]]; }
 stage_train10m() {
   ensure_env
-  if [[ ! -s $WORK/shards/index.json ]]; then
-    rm -rf "$WORK/shards.partial"
-    in_env python -m kahlus.shards nsrr --cohorts shhs --out "$WORK/shards.partial" --jobs 32
-    mv "$WORK/shards.partial" "$WORK/shards"
+  if [[ ! -s $SHARDS/index.json ]]; then
+    rm -rf "$SHARDS.partial"
+    in_env python -m kahlus.shards nsrr --cohorts shhs --out "$SHARDS.partial" --jobs 32
+    mv "$SHARDS.partial" "$SHARDS"
   fi
-  in_env env DOCKER=0 "$REPO/scripts/train_a100.sh" 10m "$WORK/shards" "$WORK/runs"
+  in_env env DOCKER=0 "$REPO/scripts/train_a100.sh" 10m "$SHARDS" "${RUN10M%/*}"
 }
 
 stage_evidence() {
@@ -196,6 +214,7 @@ stage_evidence() {
 current=""
 on_exit() {
   local rc=$?
+  set +e  # after a dropped SSH session, writing to the terminal fails; the zip must still be packed
   ((rc != 0)) && [[ -n $current ]] || return 0
   echo "FAILED at stage $current (exit $rc). Log: $WORK/logs/$current.log" >&2
   [[ $current == evidence ]] || stage_evidence >&2 || true
@@ -206,6 +225,10 @@ on_exit() {
   fi
 }
 trap on_exit EXIT
+# Ctrl-C, kill or a dropped SSH session still packs the evidence zip. Run inside tmux or nohup to keep going.
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "commit $COMMIT | WORK=$WORK | NSRR_ROOT=$NSRR_ROOT | NGPU=$NGPU | DOCKER=$DOCKER | stages: ${want[*]}"
 for s in "${STAGES[@]}"; do
