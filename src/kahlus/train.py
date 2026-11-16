@@ -77,7 +77,7 @@ def main(argv=None) -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--size", choices=sorted(SIZES), required=True)
     ap.add_argument("--train-datasets", nargs="+", required=True)
-    ap.add_argument("--steps", type=int, required=True, help="optimizer steps")
+    ap.add_argument("--steps", type=int, help="optimizer steps (default: --max-epochs passes over the training data)")
     ap.add_argument("--batch", type=int, default=64, help="windows per process per micro-batch")
     ap.add_argument("--accum", type=int, help="micro-batches per optimizer step (default: from the data size, see batch_for_data)")
     ap.add_argument("--context", type=int, default=64, help="seconds of context")
@@ -90,7 +90,7 @@ def main(argv=None) -> None:
     ap.add_argument("--weight-decay", type=float, help="default: --wd-lr-product / --lr, so the decay moves with the learning rate")
     ap.add_argument("--wd-lr-product", type=float, default=1.5e-5, help="learning rate times weight decay; tune it together with --lr")
     ap.add_argument("--qk-norm", action=argparse.BooleanOptionalAction, default=True, help="LayerNorm on attention queries and keys")
-    ap.add_argument("--max-epochs", type=float, default=4.0, help="warn when the run reads the training data more often than this")
+    ap.add_argument("--max-epochs", type=float, default=4.0, help="passes over the training data: sets the default --steps, and --steps beyond it warns")
     ap.add_argument("--ckpt-every", type=int, default=1000)
     ap.add_argument("--keep", type=int, default=2, help="checkpoints kept on disk")
     ap.add_argument("--log-every", type=int, default=50)
@@ -131,7 +131,10 @@ def main(argv=None) -> None:
         args.accum = max(1, math.ceil(batch_for_data(n_patches // args.context) / (args.batch * world)))
     if args.weight_decay is None:
         args.weight_decay = args.wd_lr_product / args.lr
-    epochs = args.steps * args.accum * args.batch * world * args.context / n_patches
+    patches_per_step = args.accum * args.batch * world * args.context
+    if args.steps is None:
+        args.steps = max(1, int(args.max_epochs * n_patches / patches_per_step))
+    epochs = args.steps * patches_per_step / n_patches
     torch.manual_seed(args.seed)  # every rank builds the same initial weights
     model = KahlusPatchModel(cfg).to(device)
     decay = [p for p in model.parameters() if p.ndim >= 2]

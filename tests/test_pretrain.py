@@ -1,5 +1,6 @@
 """Pretraining path of issue #11, proven on CPU: causal shards, the MESA seal, 1- and 2-process (gloo DDP)
 runs, kill-and-resume with identical losses, and the benchmark harness on the resulting tiny checkpoint."""
+import inspect
 import json
 import os
 import subprocess
@@ -194,6 +195,7 @@ def test_launch_script_prints_its_commands(tmp_path):
         "run_env preflight", "kahlus.train", "forecast_bench", "run_env summary"]
     assert "--expect-gpus 8" in steps[0]  # 8 GPUs unless NGPU says otherwise
     assert "--nproc_per_node=8 -m kahlus.train" in steps[1] and "--size 200m" in steps[1] and "--amp bf16" in steps[1]
+    assert "--steps" not in steps[1] and "--steps 500" in dry("200m", STEPS="500").stdout  # no step count unless STEPS sets one
     assert "--accum" not in steps[1]  # the trainer derives the effective batch from the data size
     assert "--test-dataset" not in ok.stdout
     assert "--test-dataset shhs" in dry("200m", TEST_DATASET="shhs").stdout
@@ -203,10 +205,12 @@ def test_launch_script_prints_its_commands(tmp_path):
     (line,) = [ln for ln in docker.stdout.splitlines() if ln.startswith("+ ")]  # the container reruns this script, nothing else runs on the host
     assert line.startswith("+ docker run") and "--gpus all" in line and "--ipc=host" in line and "/data/runs:/data/runs" in line
     assert "200m /data/shards /data/runs" in line and "device=" not in line
+    assert "GIT_CONFIG_KEY_0=safe.directory" in line and "GIT_CONFIG_VALUE_0=/workspace/repo" in line  # root in the container reads the host-owned repo
 
     # The default datasets must have readable training nights in shards written for the NSRR cohorts, and MESA stays sealed.
     train_line = next(ln for ln in ok.stdout.splitlines() if "kahlus.train" in ln).split()
-    default_datasets = train_line[train_line.index("--train-datasets") + 1 : train_line.index("--steps")]
+    first = train_line.index("--train-datasets") + 1
+    default_datasets = train_line[first : next(i for i in range(first, len(train_line)) if train_line[i].startswith("-"))]
     assert "mesa" not in default_datasets
     shard_root = tmp_path / "default-shards"
     shards.write_shards(shards.synthetic_nights(datasets=tuple(nsrr.NSRR_COHORTS)), shard_root)
@@ -242,8 +246,12 @@ def test_learning_rate_schedules():
     assert all(a > b for a, b in zip(cosine[10:], cosine[11:])) and cosine[-1] == pytest.approx(0.1, abs=1e-3)  # falls at once
 
 
-def test_batch_size_follows_the_data_size():
-    assert [train.batch_for_data(n) for n in (250, 100_000, 2_500_000, 10**9)] == [64, 64, 2048, 4096]
+def test_batch_size_depends_on_data_size_only_and_stays_in_bounds():
+    sizes = [1, 250, 10_000, 100_000, 1_000_000, 2_500_000, 10**7, 10**9]
+    batches = [train.batch_for_data(n) for n in sizes]
+    assert batches == sorted(batches)  # arXiv 2410.21676: more data, a batch that is not smaller
+    assert all(64 <= b <= 4096 for b in batches) and batches[0] < batches[-1]
+    assert list(inspect.signature(train.batch_for_data).parameters) == ["n_windows"]  # no model-size input
 
 
 def test_defaults_tie_decay_to_lr_and_batch_to_data_and_warn_on_repetition(shard_dir, tmp_path, monkeypatch, capsys):
@@ -253,12 +261,17 @@ def test_defaults_tie_decay_to_lr_and_batch_to_data_and_warn_on_repetition(shard
             "--horizon", "2", "--warmup", "1", "--workers", "0", "--lr", "6e-4"]
     train.main([*base, "--out", str(tmp_path / "short"), "--steps", "2"])
     state = torch.load(train.latest_checkpoint(tmp_path / "short"), weights_only=True)
-    # The 10 fit nights hold 2,000 s, which is 250 windows of 8 s. The data rule gives 64 windows per step: 8 micro-batches of 8.
-    assert state["identity"]["accum"] == 8
+    # The 10 fit nights hold 2,000 s, which is 250 windows of 8 s: the data rule needs more windows per step than one micro-batch of 8.
+    ident = state["identity"]
+    assert ident["accum"] * ident["batch"] * ident["world"] >= train.batch_for_data(250) and ident["accum"] > 1
     assert state["opt"]["param_groups"][0]["weight_decay"] == pytest.approx(1.5e-5 / 6e-4)
     assert "WARNING" not in capsys.readouterr().out  # 2 steps x 64 windows x 8 s = 0.5 passes over the data
     train.main([*base, "--out", str(tmp_path / "long"), "--steps", "20"])
     assert "reads the training data 5.1 times" in capsys.readouterr().out
+    train.main([*base, "--out", str(tmp_path / "auto")])  # no --steps: derived from the data and --max-epochs 4
+    ident = torch.load(train.latest_checkpoint(tmp_path / "auto"), weights_only=True)["identity"]
+    seconds = ident["steps"] * ident["accum"] * ident["batch"] * ident["world"] * 8
+    assert 3 <= seconds / 2000 <= 4 and "WARNING" not in capsys.readouterr().out  # at most 4 passes, and nearly 4
 
 
 def test_run_directory_records_its_environment_and_scope(reference_run):

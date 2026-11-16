@@ -18,7 +18,7 @@
 #                   this many GPUs are visible. Use CUDA_VISIBLE_DEVICES to hide GPUs, never an index here.
 #   TRAIN_DATASETS  default "shhs" (MrOS cannot be loaded yet; MESA stays sealed)
 #   TEST_DATASET    optional, a dataset never trained on; default none, so only subject-held-out is scored
-#   STEPS           optimizer steps (default 100000)
+#   STEPS           optimizer steps (default: 4 passes over the training data, worked out by the trainer)
 #   WORKERS         loader processes per GPU (default 6)
 #   ALLOW_1B=1      needed for the 1b point: set it only after 10m to 200m show a slope
 #   DOCKER=1        run inside DOCKER_IMAGE (default pytorch/pytorch:2.9.1-cuda12.6-cudnn9-devel)
@@ -65,6 +65,7 @@ if [[ "${DOCKER:-0}" == 1 ]]; then
   # The container sees every GPU; CUDA_VISIBLE_DEVICES and NGPU select among them, as on the host.
   run docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
     -v "$REPO":/workspace/repo -v "$SHARDS":"$SHARDS" -v "$RUN_ROOT":"$RUN_ROOT" -w /workspace/repo \
+    -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/workspace/repo \
     -e DOCKER=0 -e KAHLUS_DOCKER_IMAGE="$IMAGE" -e NGPU="$NGPU" -e STEPS -e WORKERS -e TRAIN_DATASETS -e TEST_DATASET \
     -e ALLOW_1B -e CUDA_VISIBLE_DEVICES -e KAHLUS_MESA \
     "$IMAGE" bash -c 'pip install -q -e . && exec scripts/train_a100.sh "$@"' train_a100 "$SIZE" "$SHARDS" "$RUN_ROOT"
@@ -84,7 +85,7 @@ run python -m kahlus.run_env preflight --expect-gpus "$NGPU"
 # shellcheck disable=SC2086  # TRAIN_DATASETS is a space-separated list on purpose
 run torchrun --standalone --nproc_per_node="$NGPU" -m kahlus.train \
   --shards "$SHARDS" --out "$RUN" --size "$SIZE" --train-datasets ${TRAIN_DATASETS:-shhs} \
-  --steps "${STEPS:-100000}" --batch "$BATCH" --lr "$LR" --workers "${WORKERS:-6}" --amp bf16
+  ${STEPS:+--steps "$STEPS"} --batch "$BATCH" --lr "$LR" --workers "${WORKERS:-6}" --amp bf16
 
 CKPT=$(find "$RUN" -name 'ckpt-*.pt' 2>/dev/null | sort | tail -n 1 || true)
 run python -m kahlus.forecast_bench --ckpt "${CKPT:-$RUN/ckpt-<last>.pt}" --shards "$SHARDS" \
