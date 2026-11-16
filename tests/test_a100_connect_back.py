@@ -33,3 +33,17 @@ def test_stdin_key_and_hostname_flag(tmp_path):
     r = dry_run(tmp_path, "--auth-key-file", "-", "--hostname", "a100-test", stdin="tskey-secret")
     assert "tskey-secret" not in r.stdout + r.stderr
     assert "https://a100-test.<tailnet>.ts.net" in r.stdout
+
+
+def test_unreadable_key_file_fails_without_echoing_path(tmp_path):
+    rex = tmp_path / ".local/bin/rex"  # stub so the real run skips the installer
+    rex.parent.mkdir(parents=True)
+    rex.write_text("#!/bin/sh\n")
+    rex.chmod(0o755)
+    r = subprocess.run(
+        ["bash", str(SCRIPT), "--no-systemd", "--auth-key-file", str(tmp_path / "missing-key")],
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "USER": "krish"},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert r.returncode == 1
+    assert "missing-key" not in r.stdout + r.stderr
