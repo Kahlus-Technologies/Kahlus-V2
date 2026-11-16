@@ -25,6 +25,7 @@ import torch.distributed as dist
 
 from kahlus.model import SIZES, KahlusPatchModel, ModelConfig, n_params
 from kahlus.nsrr import mesa_fit_allowed
+from kahlus.run_env import record
 from kahlus.shards import ShardSet, Windows
 
 
@@ -45,11 +46,24 @@ class MicroBatches(torch.utils.data.Dataset):
         return torch.from_numpy(x), torch.from_numpy(masked)
 
 
-def lr_at(step: int, *, lr: float, warmup: int, steps: int) -> float:
-    """Linear warm-up, then cosine decay to 10% of the peak."""
+def lr_at(step: int, *, lr: float, warmup: int, steps: int, schedule: str = "wsd", decay_frac: float = 0.1) -> float:
+    """Linear warm-up to the peak, then one of two shapes, both ending at 10% of the peak.
+    wsd (warm-up, stable, decay; arXiv 2410.05192): hold the peak, then fall linearly over the last
+    ``decay_frac`` of the run. cosine: fall along a cosine from the end of the warm-up."""
     if step < warmup:
         return lr * (step + 1) / warmup
-    return lr * (0.1 + 0.45 * (1 + math.cos(math.pi * (step - warmup) / max(1, steps - warmup))))
+    if schedule == "cosine":
+        return lr * (0.1 + 0.45 * (1 + math.cos(math.pi * (step - warmup) / max(1, steps - warmup))))
+    decay_steps = max(1, round(decay_frac * steps))
+    into = step - (steps - decay_steps)
+    return lr if into < 0 else lr * (1 - 0.9 * (into + 1) / decay_steps)
+
+
+def batch_for_data(n_windows: int) -> int:
+    """Windows per optimizer step over all ranks, chosen from the size of the training data and nothing
+    else (arXiv 2410.21676: the useful batch size grows with data size, not with model size).
+    The rule is ours: the largest power of two up to 0.1% of the windows, kept inside [64, 4096]."""
+    return min(4096, max(64, 2 ** int(math.log2(max(1.0, n_windows / 1000)))))
 
 
 def latest_checkpoint(out: Path) -> Path | None:
@@ -65,13 +79,18 @@ def main(argv=None) -> None:
     ap.add_argument("--train-datasets", nargs="+", required=True)
     ap.add_argument("--steps", type=int, required=True, help="optimizer steps")
     ap.add_argument("--batch", type=int, default=64, help="windows per process per micro-batch")
-    ap.add_argument("--accum", type=int, default=1, help="micro-batches per optimizer step")
+    ap.add_argument("--accum", type=int, help="micro-batches per optimizer step (default: from the data size, see batch_for_data)")
     ap.add_argument("--context", type=int, default=64, help="seconds of context")
     ap.add_argument("--horizon", type=int, default=4, help="seconds forecast by the future head")
     ap.add_argument("--mask-ratio", type=float, default=0.3)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--warmup", type=int, default=1000)
-    ap.add_argument("--weight-decay", type=float, default=0.05)
+    ap.add_argument("--schedule", choices=("wsd", "cosine"), default="wsd")
+    ap.add_argument("--decay-frac", type=float, default=0.1, help="wsd only: share of the run spent on the final decay")
+    ap.add_argument("--weight-decay", type=float, help="default: --wd-lr-product / --lr, so the decay moves with the learning rate")
+    ap.add_argument("--wd-lr-product", type=float, default=1.5e-5, help="learning rate times weight decay; tune it together with --lr")
+    ap.add_argument("--qk-norm", action=argparse.BooleanOptionalAction, default=True, help="LayerNorm on attention queries and keys")
+    ap.add_argument("--max-epochs", type=float, default=4.0, help="warn when the run reads the training data more often than this")
     ap.add_argument("--ckpt-every", type=int, default=1000)
     ap.add_argument("--keep", type=int, default=2, help="checkpoints kept on disk")
     ap.add_argument("--log-every", type=int, default=50)
@@ -100,10 +119,19 @@ def main(argv=None) -> None:
 
     shards = ShardSet(args.shards)
     cfg = ModelConfig(**SIZES[args.size], n_channels=len(shards.index["channels"]), patch_len=shards.index["patch_len"],
-                      context=args.context, horizon=args.horizon)
+                      context=args.context, horizon=args.horizon, qk_norm=args.qk_norm)
     missing = sorted(set(args.train_datasets) - {n["dataset"] for n in shards.nights})
     if missing:
         raise SystemExit(f"--train-datasets {missing} have no readable nights in {args.shards}")
+    train_nights = shards.select(args.train_datasets, heldout=False)  # subject-held-out: these subjects only
+    n_patches = sum(n["n"] for n in train_nights)
+    if not n_patches:
+        raise SystemExit(f"--train-datasets {args.train_datasets} have no subject outside the held-out set in {args.shards}")
+    if args.accum is None:
+        args.accum = max(1, math.ceil(batch_for_data(n_patches // args.context) / (args.batch * world)))
+    if args.weight_decay is None:
+        args.weight_decay = args.wd_lr_product / args.lr
+    epochs = args.steps * args.accum * args.batch * world * args.context / n_patches
     torch.manual_seed(args.seed)  # every rank builds the same initial weights
     model = KahlusPatchModel(cfg).to(device)
     decay = [p for p in model.parameters() if p.ndim >= 2]
@@ -112,7 +140,8 @@ def main(argv=None) -> None:
                             lr=args.lr, betas=(0.9, 0.95), fused=cuda)
 
     # Everything that must match for a resumed run to equal an uninterrupted one.
-    identity = {k: getattr(args, k) for k in ("size", "steps", "batch", "accum", "mask_ratio", "lr", "warmup", "weight_decay", "seed")}
+    identity = {k: getattr(args, k) for k in ("size", "steps", "batch", "accum", "mask_ratio", "lr", "warmup", "schedule", "decay_frac",
+                                              "weight_decay", "seed")}
     identity |= {"model": asdict(cfg), "train_datasets": sorted(args.train_datasets), "world": world, "amp": amp,
                  "shards_sha256": shards.sha256}
     start = 0
@@ -129,13 +158,18 @@ def main(argv=None) -> None:
     if rank == 0:  # drop log lines past the checkpoint: the resumed run writes them again
         kept = [ln for ln in (log_path.read_text().splitlines() if log_path.exists() else []) if json.loads(ln)["step"] <= start]
         log_path.write_text("".join(ln + "\n" for ln in kept))
-        print(f"{args.size}: {n_params(model):,} parameters, world={world}, device={device}, bf16={amp}, start step {start}", flush=True)
+        print(f"{args.size}: {n_params(model):,} parameters, world={world}, device={device}, bf16={amp}, start step {start}, "
+              f"{args.batch * args.accum * world} windows per step, weight decay {args.weight_decay:g}, {epochs:.2f} passes over the data", flush=True)
+        if epochs > args.max_epochs:
+            print(f"WARNING: this run reads the training data {epochs:.1f} times. Past about {args.max_epochs:g} passes, repeated data "
+                  "adds little (arXiv 2305.16264). Use fewer steps or more data.", flush=True)
+        record(out, start_step=start)
 
     net = torch.compile(model) if args.compile else model
     if world > 1:
         net = torch.nn.parallel.DistributedDataParallel(net, device_ids=[device.index] if cuda else None)
 
-    windows = Windows(shards, shards.select(args.train_datasets, heldout=False), args.context + args.horizon)
+    windows = Windows(shards, train_nights, args.context + args.horizon)
     data = MicroBatches(windows, total=args.steps * args.accum, batch=args.batch, context=args.context,
                         mask_ratio=args.mask_ratio, seed=args.seed, rank=rank)
     loader = iter(torch.utils.data.DataLoader(
@@ -153,7 +187,7 @@ def main(argv=None) -> None:
     t_mark, logged = time.perf_counter(), start
     for step in range(start, args.steps):
         for group in opt.param_groups:
-            group["lr"] = lr_at(step, lr=args.lr, warmup=args.warmup, steps=args.steps)
+            group["lr"] = lr_at(step, lr=args.lr, warmup=args.warmup, steps=args.steps, schedule=args.schedule, decay_frac=args.decay_frac)
         losses = torch.zeros(3, device=device)
         for k in range(args.accum):
             t0 = time.perf_counter()

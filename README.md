@@ -80,10 +80,26 @@ It installs [Rex](https://www.superlogical.com/rex/docs/linux/remote-access) und
 
 ```bash
 python -m kahlus.shards nsrr --cohorts shhs --out /scratch/shards --jobs 32        # once: EDF to memory-mapped patch shards
-scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # all GPUs (DDP, bf16) on SHHS, then the benchmark
+scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # 8 GPUs (DDP, bf16) on SHHS, then the benchmark
 ```
 
 Sizes are `10m`, `50m`, `200m` and `1b`. Run the same command again after a crash: training resumes from the newest checkpoint and gives the same losses as an uninterrupted run. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects. MrOS cannot be loaded and MESA is sealed, so there is no held-out dataset yet: with another loadable dataset, set `TEST_DATASET` to add that split.
+
+On the A100 node the launcher is the only command. It needs no conda and no sbatch:
+
+```bash
+python -m pytest tests/test_pretrain.py                                            # on any CPU first: the whole path with a tiny model
+scripts/train_a100.sh 10m /raid/scratch/$USER/shards /raid/scratch/$USER/runs      # host Python that can import torch and kahlus
+DOCKER=1 scripts/train_a100.sh 10m /raid/scratch/$USER/shards /raid/scratch/$USER/runs   # no usable Python: run in a PyTorch container
+```
+
+- It starts 8 processes with `torchrun --standalone --nproc_per_node=8`. Each process takes its GPU from `LOCAL_RANK`. Set `NGPU` and `CUDA_VISIBLE_DEVICES` to use fewer.
+- A preflight stops the run unless exactly `NGPU` GPUs are visible, and prints their names.
+- `environment.json` in the run directory records the torch, CUDA and NCCL versions, the GPU count and names, `CUDA_VISIBLE_DEVICES`, the world size, the container image and the commit, once per start.
+- `summary.md` states that the run is infrastructure validation, not a scientific claim. Send it back with `log.jsonl`, `environment.json` and `benchmark.json`. Do not send checkpoints.
+- The Docker path needs the NVIDIA container toolkit and network access (image pull, `pip install`). Nobody has run it on the node yet.
+
+Training defaults: LayerNorm on attention queries and keys (`--no-qk-norm`), a warm-up, stable, decay schedule (`--schedule cosine`), weight decay tied to the learning rate (`--wd-lr-product`), an effective batch derived from the data size (`--accum` overrides it), and a warning when a run reads the data more than 4 times (`--max-epochs`). Sources are in the roadmap.
 
 No GPU run exists yet, and this repo reports no model number from this path. The same pipeline runs on a laptop CPU with synthetic data:
 

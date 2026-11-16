@@ -12,7 +12,7 @@ import pytest
 
 torch = pytest.importorskip("torch")  # the `train` extra; the rest of the suite runs without it
 
-from kahlus import forecast_bench, nsrr, shards, train  # noqa: E402
+from kahlus import forecast_bench, nsrr, run_env, shards, train  # noqa: E402
 from kahlus.model import SIZES, KahlusPatchModel, ModelConfig, n_params  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
@@ -145,6 +145,7 @@ def test_kill_and_resume_reproduces_the_uninterrupted_run(shard_dir, tmp_path, r
     assert _losses(out) == _losses(ref)
     a, b = (torch.load(train.latest_checkpoint(d), weights_only=True)["model"] for d in (out, ref))
     assert all(torch.equal(a[k], b[k]) for k in a)
+    assert [s["start_step"] for s in json.loads((out / "environment.json").read_text())] == [0, at_kill]
 
 
 def test_resume_refuses_a_different_run(shard_dir, reference_run, monkeypatch):
@@ -182,14 +183,26 @@ def test_benchmark_scores_the_tiny_checkpoint(shard_dir, reference_run, tmp_path
 
 def test_launch_script_prints_its_commands(tmp_path):
     def dry(size, **env):
+        clean = {k: v for k, v in os.environ.items() if k not in ("NGPU", "DOCKER", "DOCKER_IMAGE", "TEST_DATASET", "TRAIN_DATASETS")}
         return subprocess.run([str(REPO / "scripts/train_a100.sh"), size, "/data/shards", "/data/runs"],
-                              env=os.environ | {"DRY_RUN": "1", "NGPU": "8"} | env, capture_output=True, text=True)
+                              env=clean | {"DRY_RUN": "1"} | env, capture_output=True, text=True)
 
     ok = dry("200m")
     assert ok.returncode == 0, ok.stderr
-    assert "--nproc-per-node=8 -m kahlus.train" in ok.stdout and "--size 200m" in ok.stdout and "--amp bf16" in ok.stdout
-    assert "kahlus.forecast_bench" in ok.stdout and "--test-dataset" not in ok.stdout
+    steps = [ln for ln in ok.stdout.splitlines() if ln.startswith("+ ")]
+    assert [next(m for m in ("run_env preflight", "kahlus.train", "forecast_bench", "run_env summary") if m in ln) for ln in steps] == [
+        "run_env preflight", "kahlus.train", "forecast_bench", "run_env summary"]
+    assert "--expect-gpus 8" in steps[0]  # 8 GPUs unless NGPU says otherwise
+    assert "--nproc_per_node=8 -m kahlus.train" in steps[1] and "--size 200m" in steps[1] and "--amp bf16" in steps[1]
+    assert "--accum" not in steps[1]  # the trainer derives the effective batch from the data size
+    assert "--test-dataset" not in ok.stdout
     assert "--test-dataset shhs" in dry("200m", TEST_DATASET="shhs").stdout
+    assert "--expect-gpus 4" in dry("200m", NGPU="4").stdout and "--nproc_per_node=4 " in dry("200m", NGPU="4").stdout
+
+    docker = dry("200m", DOCKER="1")
+    (line,) = [ln for ln in docker.stdout.splitlines() if ln.startswith("+ ")]  # the container reruns this script, nothing else runs on the host
+    assert line.startswith("+ docker run") and "--gpus all" in line and "--ipc=host" in line and "/data/runs:/data/runs" in line
+    assert "200m /data/shards /data/runs" in line and "device=" not in line
 
     # The default datasets must have readable training nights in shards written for the NSRR cohorts, and MESA stays sealed.
     train_line = next(ln for ln in ok.stdout.splitlines() if "kahlus.train" in ln).split()
@@ -199,3 +212,63 @@ def test_launch_script_prints_its_commands(tmp_path):
     shards.write_shards(shards.synthetic_nights(datasets=tuple(nsrr.NSRR_COHORTS)), shard_root)
     assert shards.ShardSet(shard_root).select(default_datasets, heldout=False)
     assert dry("1b").returncode == 2 and dry("1b", ALLOW_1B="1").returncode == 0
+
+
+def test_qk_norm_removes_the_scale_of_queries_and_keys():
+    # Oracle: LayerNorm(a * x) equals LayerNorm(x) for a > 0. So with QK-layernorm (arXiv 2309.14322) the attention
+    # weights cannot grow with the size of the query and key projections. Without it they do.
+    def forecasts(qk_norm, scale):
+        torch.manual_seed(0)
+        model = KahlusPatchModel(ModelConfig(**SIZES["tiny"], patch_len=16, context=8, horizon=2, qk_norm=qk_norm))
+        d = model.cfg.d_model
+        with torch.no_grad():
+            for block in model.blocks:
+                block.qkv.bias[: 2 * d] = 0
+                block.qkv.weight[: 2 * d] *= scale  # the query and key rows; the value rows stay
+            torch.manual_seed(1)
+            return model.predict(torch.randn(2, 8, 2, 16))[1]
+
+    assert (forecasts(True, 1.0) - forecasts(True, 30.0)).abs().max() < 1e-3
+    assert (forecasts(False, 1.0) - forecasts(False, 30.0)).abs().max() > 1e-2
+
+
+def test_learning_rate_schedules():
+    kw = {"lr": 1.0, "warmup": 10, "steps": 100}
+    wsd = [train.lr_at(s, **kw) for s in range(100)]
+    cosine = [train.lr_at(s, **kw, schedule="cosine") for s in range(100)]
+    assert wsd[:10] == cosine[:10] == pytest.approx([0.1 * (s + 1) for s in range(10)])  # the same linear warm-up
+    assert wsd[10:90] == [1.0] * 80  # stable at the peak until the last 10% of the run
+    assert wsd[90:] == sorted(wsd[90:], reverse=True) and wsd[-1] == pytest.approx(0.1)
+    assert all(a > b for a, b in zip(cosine[10:], cosine[11:])) and cosine[-1] == pytest.approx(0.1, abs=1e-3)  # falls at once
+
+
+def test_batch_size_follows_the_data_size():
+    assert [train.batch_for_data(n) for n in (250, 100_000, 2_500_000, 10**9)] == [64, 64, 2048, 4096]
+
+
+def test_defaults_tie_decay_to_lr_and_batch_to_data_and_warn_on_repetition(shard_dir, tmp_path, monkeypatch, capsys):
+    for name in ("KAHLUS_MESA", "WORLD_SIZE", "RANK", "LOCAL_RANK"):
+        monkeypatch.delenv(name, raising=False)
+    base = ["--shards", str(shard_dir), "--size", "tiny", "--train-datasets", "synth_a", "--batch", "8", "--context", "8",
+            "--horizon", "2", "--warmup", "1", "--workers", "0", "--lr", "6e-4"]
+    train.main([*base, "--out", str(tmp_path / "short"), "--steps", "2"])
+    state = torch.load(train.latest_checkpoint(tmp_path / "short"), weights_only=True)
+    # The 10 fit nights hold 2,000 s, which is 250 windows of 8 s. The data rule gives 64 windows per step: 8 micro-batches of 8.
+    assert state["identity"]["accum"] == 8
+    assert state["opt"]["param_groups"][0]["weight_decay"] == pytest.approx(1.5e-5 / 6e-4)
+    assert "WARNING" not in capsys.readouterr().out  # 2 steps x 64 windows x 8 s = 0.5 passes over the data
+    train.main([*base, "--out", str(tmp_path / "long"), "--steps", "20"])
+    assert "reads the training data 5.1 times" in capsys.readouterr().out
+
+
+def test_run_directory_records_its_environment_and_scope(reference_run):
+    (start,) = json.loads((reference_run / "environment.json").read_text())
+    assert start["start_step"] == 0 and start["torch"] == torch.__version__ and start["gpu_count"] == torch.cuda.device_count()
+    assert {"torch_cuda", "nccl", "gpu_names", "cuda_visible_devices", "world_size", "docker_image"} <= start.keys()
+    text = run_env.summary(reference_run)
+    assert "not a scientific claim" in text and f"1 to {STEPS}" in text
+    assert (reference_run / "summary.md").read_text() == text
+
+    run_env.main(["preflight", "--expect-gpus", str(torch.cuda.device_count())])
+    with pytest.raises(SystemExit, match="preflight failed"):
+        run_env.main(["preflight", "--expect-gpus", str(torch.cuda.device_count() + 1)])

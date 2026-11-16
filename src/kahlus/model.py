@@ -36,12 +36,15 @@ class ModelConfig:
     patch_len: int = 125
     context: int = 64
     horizon: int = 4
+    qk_norm: bool = True  # LayerNorm on queries and keys; bounds attention logits (arXiv 2309.14322)
 
 
 class Block(nn.Module):
-    def __init__(self, d: int, heads: int):
+    def __init__(self, d: int, heads: int, qk_norm: bool):
         super().__init__()
         self.heads = heads
+        self.q_norm = nn.LayerNorm(d // heads) if qk_norm else nn.Identity()
+        self.k_norm = nn.LayerNorm(d // heads) if qk_norm else nn.Identity()
         self.norm1 = nn.LayerNorm(d)
         self.qkv = nn.Linear(d, 3 * d)
         self.proj = nn.Linear(d, d)
@@ -51,7 +54,7 @@ class Block(nn.Module):
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         b, n, d = x.shape
         q, k, v = self.qkv(self.norm1(x)).view(b, n, 3, self.heads, d // self.heads).permute(2, 0, 3, 1, 4)
-        attn = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
+        attn = F.scaled_dot_product_attention(self.q_norm(q), self.k_norm(k), v, attn_mask=mask)
         x = x + self.proj(attn.transpose(1, 2).reshape(b, n, d))
         return x + self.mlp(self.norm2(x))
 
@@ -65,7 +68,7 @@ class KahlusPatchModel(nn.Module):
         self.mask_token = nn.Parameter(torch.randn(d) * 0.02)
         self.channel = nn.Parameter(torch.randn(cfg.n_channels, d) * 0.02)
         self.time = nn.Parameter(torch.randn(cfg.context, d) * 0.02)
-        self.blocks = nn.ModuleList(Block(d, cfg.n_heads) for _ in range(cfg.n_layers))
+        self.blocks = nn.ModuleList(Block(d, cfg.n_heads, cfg.qk_norm) for _ in range(cfg.n_layers))
         self.norm = nn.LayerNorm(d)
         self.recon = nn.Linear(d, cfg.patch_len)
         self.future = nn.Linear(d, cfg.horizon * cfg.patch_len)
