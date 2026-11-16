@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Fetch the local NSRR dev slice: all MESA+SHHS1 annotation XMLs plus 25 EDFs per dataset.
-# Idempotent: skips files already present. Token read from ~/.nsrr_token.
+# Idempotent: skips files already present. Token read from ~/.nsrr_token. Writes to NSRR_ROOT (default ~/data/nsrr).
 set -euo pipefail
 T=$(cat ~/.nsrr_token)
-ROOT=~/data/nsrr
+ROOT=${NSRR_ROOT:-$HOME/data/nsrr}
 N_EDF=${N_EDF:-25}
 api() { curl -s "https://sleepdata.org/api/v1/datasets/$1/files.json?auth_token=$T&path=$2"; }
 url() { echo "https://sleepdata.org/datasets/$1/files/a/$T/m/nsrr-gem-v8-0-0/$2"; }

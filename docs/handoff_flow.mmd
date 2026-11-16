@@ -1,0 +1,9 @@
+flowchart TD
+  K[Krish runs the package<br/>scripts/a100_handoff.sh] --> V[verify<br/>checksums, commit]
+  V --> P[preflight<br/>8 GPUs visible]
+  P --> S[smoke<br/>synthetic data]
+  S --> F[fetch<br/>NSRR dev slice]
+  F --> D[devslice<br/>study reproduction]
+  D --> T[train10m<br/>SHHS, 4 passes]
+  T --> E[evidence zip<br/>sent back]
+  K -. optional, one time .-> C[connect-back<br/>scripts/a100_connect_back.sh]
