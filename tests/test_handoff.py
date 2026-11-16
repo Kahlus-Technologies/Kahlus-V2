@@ -32,8 +32,8 @@ def test_evidence_zip_keeps_records_and_drops_secrets_checkpoints_and_data(tmp_p
         "runs/kahlus-10m/ckpt-00000020.pt": "checkpoint", "runs/kahlus-10m/ckpt-00000040.pt.tmp": "checkpoint",
         "devslice/r/census/mesa_per_subject.jsonl": "data", "runs/night.edf": "data", "logs/shhs1-dataset-0.21.0.csv": "data",
         "logs/fetch.log": "holds the NSRR token", "logs/ssh.log": "holds a secret", "logs/env.log": "holds a secret",
-        "logs/hf.log": "holds a secret", "runs/kahlus-10m/curve.png": "not a text record",
-        "logs/bad\nname.log": "odd file name",
+        "logs/hf.log": "holds a secret", "logs/bearer.log": "holds a secret", "runs/kaggle.json": "holds a secret",
+        "runs/kahlus-10m/curve.png": "not a text record", "logs/bad\nname.log": "odd name",
     }
     drop_dirs = ["runs/venv-host", "smoke/shards", "devslice/r/bench/cache"]
     stray = ["ts-key.txt", ".env", "venv-host", "nsrr", "NSRR-data", "shards", "home"]  # in WORK, outside the run outputs
@@ -45,6 +45,9 @@ def test_evidence_zip_keeps_records_and_drops_secrets_checkpoints_and_data(tmp_p
     _write(work / "logs/ssh.log", "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n")
     _write(work / "logs/env.log", "WANDB_API_KEY=0123456789abcdef\n")
     _write(work / "logs/hf.log", "login with hf_abcdefghijklmnopqrstuvwxyz0123\n")
+    _write(work / "logs/bearer.log", "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abcdef\n")
+    _write(work / "runs/kaggle.json", '{"username": "k", "key": "0123456789abcdef0123"}\n')
+    _write(work / "logs/bad\ndir/a.log")
     (work / "logs/token-link.json").symlink_to(home / ".nsrr_token")
     os.mkfifo(work / "logs/stuck.log")
 
@@ -61,7 +64,7 @@ def test_evidence_zip_keeps_records_and_drops_secrets_checkpoints_and_data(tmp_p
     assert names == set(keep) | {"MANIFEST.sha256", "EXCLUDED.txt"}
     assert excluded == ({k.replace("\n", "\\n"): v for k, v in drop_files.items()} | dict.fromkeys(drop_dirs, "skipped directory")
                         | dict.fromkeys(stray, "not a run output")
-                        | {"logs/token-link.json": "symlink", "logs/stuck.log": "not a regular file"})
+                        | {"logs/token-link.json": "symlink", "logs/stuck.log": "not a regular file", "logs/bad\\ndir": "odd name"})
     assert sorted(line.split("  ")[1] for line in manifest.splitlines()) == sorted(keep)
 
 

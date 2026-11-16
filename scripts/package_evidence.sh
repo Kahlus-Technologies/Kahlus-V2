@@ -5,7 +5,7 @@
 #
 # Takes only the run outputs of a100_handoff.sh in <work-dir> (verify.txt, preflight/, smoke/, devslice/,
 # runs/, logs/), and of those only text records: summaries, metrics, configs, environment records,
-# manifests and logs (.json .jsonl .md .txt .tsv .log .csv, each at most 20 MB).
+# manifests and logs (.json .jsonl .md .txt .tsv .log, each at most 20 MB).
 # It never takes checkpoints, data, tokens, keys or .env files: it skips them by file name, and it skips
 # every file whose text holds the value of ~/.nsrr_token, a private key block, a known token format or a
 # KEY=value style secret. Python environments, NSRR data, shards and feature caches are skipped as whole
@@ -31,18 +31,22 @@ import zipfile
 from pathlib import Path
 
 RUN_OUTPUTS = {"verify.txt", "preflight", "smoke", "devslice", "runs", "logs"}
-KEEP_SUFFIXES = {".json", ".jsonl", ".md", ".txt", ".tsv", ".log", ".csv"}
+KEEP_SUFFIXES = {".json", ".jsonl", ".md", ".txt", ".tsv", ".log"}  # no .csv: NSRR ships per-subject tables as CSV
 MAX_BYTES = 20 * 1024 * 1024
 SKIP_DIRS = ["venv*", "nsrr*", "shards", "*.partial", "cache", "home", "__pycache__", ".git"]
 SECRET = [".env", ".env.*", "*.env", "*token*", "*secret*", "*password*", "*passwd*", "pw.txt", ".netrc", "*key*",
           "*credential*", "*.pem", "*.p12", "id_rsa*", "id_ed25519*", "id_ecdsa*", "id_dsa*"]
 CHECKPOINT = ["ckpt-*", "*.pt", "*.pt.tmp", "*.pth", "*.ckpt", "*.safetensors"]
-DATA = ["*.edf", "*.xml", "*.npy", "*.npz", "*_per_subject.jsonl", "*-dataset-*.csv"]  # NSRR data, per night or per subject
+DATA = ["*.edf", "*.xml", "*.csv", "*.npy", "*.npz", "*_per_subject.jsonl"]  # NSRR data, per night or per subject
 SECRET_TEXT = re.compile(
     rb"-----BEGIN [A-Z ]*PRIVATE KEY-----"
     rb"|\b(?:tskey-[a-z]+-|hf_|gh[opsur]_|github_pat_|glpat-|xox[abprs]-|sk-)[A-Za-z0-9_-]{16,}"
     rb"|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"
-    rb"|(?i:[a-z0-9_]*(?:token|secret|api_?key|access_?key|password)[a-z0-9_]*[\"']?\s*[=:]\s*[\"']?[^\s\"',}]{8,})")
+    rb"|(?i:bearer\s+[A-Za-z0-9._~+/=-]{16,})"  # HTTP Authorization header
+    rb"|://[^/\s:@]+:[^/\s@]+@"  # credentials in a URL
+    rb"|(?i:\"(?:auth|key)\"\s*:\s*\"[^\"]{12,}\")"  # docker config.json, kaggle.json
+    rb"|(?i:\bpassword\s+\S{8,})"  # .netrc
+    rb"|(?i:[a-z0-9_]*(?:token|secret|api_?key|access_?key|_key|password)[a-z0-9_]*[\"']?\s*[=:]\s*[\"']?[^\s\"',}]{8,})")
 ODD_NAME = re.compile(r"[\x00-\x1f\x7f]|[\ud800-\udfff]")
 
 
@@ -57,8 +61,6 @@ def shown(rel):
 def check(path, token):
     """Return (reason to skip, None) or (None, file body)."""
     name = path.name
-    if ODD_NAME.search(name):
-        return "odd file name", None
     for label, patterns in (("secret", SECRET), ("checkpoint", CHECKPOINT), ("data", DATA)):
         if matches(name, patterns):
             return label, None
@@ -90,7 +92,11 @@ def main(work, out):
 
     top = out.stem
     kept, skipped = [], []
-    for root, dirs, files in os.walk(work):
+
+    def unreadable(err):
+        skipped.append((Path(err.filename).relative_to(work), f"unreadable ({err.strerror})"))
+
+    for root, dirs, files in os.walk(work, onerror=unreadable):
         rel_root = Path(root).relative_to(work)
         entries = sorted(dirs + files)
         dirs[:] = []
@@ -100,6 +106,8 @@ def main(work, out):
                 continue
             if rel_root == Path(".") and name not in RUN_OUTPUTS:
                 skipped.append((rel, "not a run output"))
+            elif ODD_NAME.search(name):  # a newline or non-UTF-8 byte would break MANIFEST.sha256 or the zip
+                skipped.append((rel, "odd name"))
             elif path.is_symlink():
                 skipped.append((rel, "symlink"))
             elif path.is_dir():

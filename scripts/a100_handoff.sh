@@ -45,9 +45,9 @@ if [[ -z ${WORK:-} ]]; then
   scratch=/raid/scratch/${USER:-$(id -un)}/kahlus-a100
   [[ -d /raid/scratch ]] && mkdir -p "$scratch" 2>/dev/null && WORK=$scratch
 fi
+WORK=$(realpath -m "$WORK")
+[[ $WORK != / && "$(realpath "$HOME")/" != "$WORK"/* ]] || die "WORK=$WORK holds your home folder: use a folder of its own"
 mkdir -p "$WORK/logs" "$WORK/state" "$WORK/home"
-WORK=$(cd "$WORK" && pwd -P)
-[[ $WORK != / && "$(cd "$HOME" && pwd -P)/" != "$WORK"/* ]] || die "WORK=$WORK holds your home folder: use a folder of its own"
 mkdir -p "${NSRR_ROOT:=$WORK/nsrr}"
 NSRR_ROOT=$(cd "$NSRR_ROOT" && pwd -P)  # repro_dev_slice.sh and docker -v need an absolute path
 export NSRR_ROOT

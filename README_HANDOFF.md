@@ -145,7 +145,7 @@ The evidence zip contains only text records from the run outputs in `WORK`:
 - `MANIFEST.sha256`, with the SHA-256 of each file in the zip
 - `EXCLUDED.txt`, with each path that the zip does not contain and the reason
 
-The zip never contains checkpoints, NSRR data, shards, feature caches, Python environments, tokens, keys or `.env` files. It takes nothing from `WORK` outside the folders above. It leaves out each file whose name looks like a secret, and each file whose text holds the value of `~/.nsrr_token`, a private key, a known token format (for example `hf_`, `ghp_`, `AKIA`, `tskey-`) or a line such as `API_KEY=...`. It takes only `.json`, `.jsonl`, `.md`, `.txt`, `.tsv`, `.log` and `.csv` files of 20 MB or less. Before you send the zip, you can look at its file list with `unzip -l`.
+The zip never contains checkpoints, NSRR data, shards, feature caches, Python environments, tokens, keys or `.env` files. It takes nothing from `WORK` outside the folders above. It leaves out each file whose name looks like a secret, and each file whose text holds the value of `~/.nsrr_token`, a private key, a known token format (for example `hf_`, `ghp_`, `AKIA`, `tskey-`, `Bearer`) or a line such as `API_KEY=...`. It takes only `.json`, `.jsonl`, `.md`, `.txt`, `.tsv` and `.log` files of 20 MB or less. Before you send the zip, you can look at its file list with `unzip -l`.
 
 ## Known limits
 
