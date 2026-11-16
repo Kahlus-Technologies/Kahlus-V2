@@ -66,16 +66,6 @@ scripts/repro_dev_slice.sh        # every study into artifacts/runs/<time>-<comm
 
 On a cluster, point `NSRR_ROOT` (or `NSRR_MESA_ROOT` / `NSRR_SHHS_ROOT`) at the full cohorts and set `JOBS` to run steps in parallel.
 
-### Connect-back for the A100 machine
-
-Run once on the A100 machine, as your normal user, after you create a one-time [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) (the key owner is the only account that can connect):
-
-```bash
-scripts/a100_connect_back.sh --auth-key-file ~/ts-key.txt   # or: ... --auth-key-file - < key (stdin)
-```
-
-It installs [Rex](https://www.superlogical.com/rex/docs/linux/remote-access) under `~/.local/bin`, runs `rex server run --tailscale` as a systemd user service (device `kahlus-a100`, change with `--hostname`), tries `loginctl enable-linger` so it survives logout and reboot, and prints the device address. No root, no open ports. If systemd user services or linger are unavailable, the script says so: it falls back to `nohup` or tells you the server stops when you log out. Add `--dry-run` to see every command first. Delete the key file afterwards. Then the OVH server runs `rex -S https://kahlus-a100.<tailnet>.ts.net ls`.
-
 **Pretrain and score a model** ([issue #11](https://github.com/Kahlus-Technologies/Kahlus-V2/issues/11)). This path needs PyTorch: `pip install -e '.[dev,train]'`.
 
 ```bash
@@ -110,6 +100,16 @@ python -m kahlus.forecast_bench --ckpt /tmp/run/ckpt-00000200.pt --shards /tmp/s
 ```
 
 What is still open before a real sweep: [`docs/ROADMAP.md`](docs/ROADMAP.md#scaling-sweep-s1-what-exists-and-what-is-open).
+
+### Connect-back for the A100 machine
+
+Run once on the A100 machine, as your normal user, after you create a one-time [Tailscale auth key](https://login.tailscale.com/admin/settings/keys) (the key owner is the only account that can connect):
+
+```bash
+scripts/a100_connect_back.sh --auth-key-file ~/ts-key.txt   # or: ... --auth-key-file - < key (stdin)
+```
+
+It installs [Rex](https://www.superlogical.com/rex/docs/linux/remote-access) under `~/.local/bin`, runs `rex server run --tailscale` as a systemd user service (device `kahlus-a100`, change with `--hostname`), tries `loginctl enable-linger` so it survives logout and reboot, and prints the device address. No root, no open ports. If systemd user services or linger are unavailable, the script says so: it falls back to `nohup` or tells you the server stops when you log out. Add `--dry-run` to see every command first. Delete the key file afterwards. Then the OVH server runs `rex -S https://kahlus-a100.<tailnet>.ts.net ls`.
 
 ## How it works
 
