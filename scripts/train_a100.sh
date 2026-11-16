@@ -11,8 +11,8 @@
 #
 # Settings (environment):
 #   NGPU            processes to start, one per GPU (default: every visible GPU)
-#   TRAIN_DATASETS  default "mesa mros", the plan of issue #11
-#   TEST_DATASET    default "shhs", never trained on
+#   TRAIN_DATASETS  default "shhs" (MrOS cannot be loaded yet; MESA stays sealed)
+#   TEST_DATASET    optional, a dataset never trained on; default none, so only subject-held-out is scored
 #   STEPS           optimizer steps (default 100000)
 #   WORKERS         loader processes per GPU (default 6)
 #   ALLOW_1B=1      needed for the 1b point: set it only after 10m to 200m show a slope
@@ -45,6 +45,7 @@ fi
 DRY_RUN=${DRY_RUN:-0}
 if [[ "$DRY_RUN" != 1 ]]; then
   [[ -f "$SHARDS/index.json" ]] || { echo "no shards at $SHARDS: build them with python -m kahlus.shards nsrr --out $SHARDS" >&2; exit 2; }
+  command -v nvidia-smi >/dev/null || { echo "no GPU visible: nvidia-smi not found" >&2; exit 2; }
   NGPU=${NGPU:-$(nvidia-smi -L | wc -l)}
   ((NGPU >= 1)) || { echo "no GPU visible" >&2; exit 2; }
 fi
@@ -59,9 +60,9 @@ run() {
 
 # shellcheck disable=SC2086  # TRAIN_DATASETS is a space-separated list on purpose
 run torchrun --standalone --nproc-per-node="$NGPU" -m kahlus.train \
-  --shards "$SHARDS" --out "$RUN" --size "$SIZE" --train-datasets ${TRAIN_DATASETS:-mesa mros} \
+  --shards "$SHARDS" --out "$RUN" --size "$SIZE" --train-datasets ${TRAIN_DATASETS:-shhs} \
   --steps "${STEPS:-100000}" --batch "$BATCH" --accum "$ACCUM" --lr "$LR" --workers "${WORKERS:-6}" --amp bf16
 
 CKPT=$(find "$RUN" -name 'ckpt-*.pt' 2>/dev/null | sort | tail -n 1 || true)
 run python -m kahlus.forecast_bench --ckpt "${CKPT:-$RUN/ckpt-<last>.pt}" --shards "$SHARDS" \
-  --test-dataset "${TEST_DATASET:-shhs}" --device cuda --out "$RUN/benchmark.json"
+  ${TEST_DATASET:+--test-dataset "$TEST_DATASET"} --device cuda --out "$RUN/benchmark.json"

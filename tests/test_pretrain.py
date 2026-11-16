@@ -176,8 +176,11 @@ def test_benchmark_scores_the_tiny_checkpoint(shard_dir, reference_run, tmp_path
     with pytest.raises(SystemExit, match="training dataset"):
         forecast_bench.main([*args, "--test-dataset", "synth_a"])
 
+    only_subjects = forecast_bench.main(args)
+    assert list(only_subjects["splits"]) == ["subject_held_out"] and only_subjects["test_dataset"] is None
 
-def test_launch_script_prints_its_commands():
+
+def test_launch_script_prints_its_commands(tmp_path):
     def dry(size, **env):
         return subprocess.run([str(REPO / "scripts/train_a100.sh"), size, "/data/shards", "/data/runs"],
                               env=os.environ | {"DRY_RUN": "1", "NGPU": "8"} | env, capture_output=True, text=True)
@@ -185,5 +188,14 @@ def test_launch_script_prints_its_commands():
     ok = dry("200m")
     assert ok.returncode == 0, ok.stderr
     assert "--nproc-per-node=8 -m kahlus.train" in ok.stdout and "--size 200m" in ok.stdout and "--amp bf16" in ok.stdout
-    assert "kahlus.forecast_bench" in ok.stdout and "--test-dataset shhs" in ok.stdout
+    assert "kahlus.forecast_bench" in ok.stdout and "--test-dataset" not in ok.stdout
+    assert "--test-dataset shhs" in dry("200m", TEST_DATASET="shhs").stdout
+
+    # The default datasets must have readable training nights in shards written for the NSRR cohorts, and MESA stays sealed.
+    train_line = next(ln for ln in ok.stdout.splitlines() if "kahlus.train" in ln).split()
+    default_datasets = train_line[train_line.index("--train-datasets") + 1 : train_line.index("--steps")]
+    assert "mesa" not in default_datasets
+    shard_root = tmp_path / "default-shards"
+    shards.write_shards(shards.synthetic_nights(datasets=tuple(nsrr.NSRR_COHORTS)), shard_root)
+    assert shards.ShardSet(shard_root).select(default_datasets, heldout=False)
     assert dry("1b").returncode == 2 and dry("1b", ALLOW_1B="1").returncode == 0

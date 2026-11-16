@@ -191,7 +191,7 @@ def main(argv=None) -> dict:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--shards", required=True)
-    ap.add_argument("--test-dataset", required=True, help="dataset no model is fitted on")
+    ap.add_argument("--test-dataset", help="dataset no model is fitted on; omitted: only the subject-held-out split is scored")
     ap.add_argument("--out", required=True)
     ap.add_argument("--n-fit", type=int, default=20000, help="windows the baselines are fitted on")
     ap.add_argument("--n-eval", type=int, default=5000, help="windows per scored split")
@@ -219,8 +219,9 @@ def main(argv=None) -> dict:
     tune = eval_windows(shards, [n for n in fit_nights if is_tuning(n)], **cut, n=args.n_eval, seed=args.seed + 1)
     splits = {
         "subject_held_out": eval_windows(shards, shards.select(train_datasets, heldout=True), **cut, n=args.n_eval, seed=args.seed + 2),
-        "dataset_held_out": eval_windows(shards, shards.select([args.test_dataset]), **cut, n=args.n_eval, seed=args.seed + 3),
     }
+    if args.test_dataset:
+        splits["dataset_held_out"] = eval_windows(shards, shards.select([args.test_dataset]), **cut, n=args.n_eval, seed=args.seed + 3)
     n_boot = 2000 if args.bootstrap == "claim" else 300
     report = {
         "task": f"forecast {cut['horizon']} s from {cut['context']} s, strictly future",

@@ -1,6 +1,6 @@
 """Masked plus future-patch pretraining on patch shards (issue #11).
 
-    python -m kahlus.train --shards DIR --out RUN --size 10m --train-datasets mesa mros
+    python -m kahlus.train --shards DIR --out RUN --size 10m --train-datasets shhs
     torchrun --standalone --nproc-per-node=8 -m kahlus.train ...      # DDP, one process per GPU
 
 Rerun the same command to resume: the run continues from the newest checkpoint in ``--out`` and gives
@@ -87,6 +87,8 @@ def main(argv=None) -> None:
     rank = int(os.environ.get("RANK", 0))
     cuda = torch.cuda.is_available()
     device = torch.device(f"cuda:{os.environ.get('LOCAL_RANK', 0)}" if cuda else "cpu")
+    if cuda:
+        torch.cuda.set_device(device)
     if world > 1:
         dist.init_process_group("nccl" if cuda else "gloo")
     if cuda:

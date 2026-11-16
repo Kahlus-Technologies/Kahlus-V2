@@ -27,7 +27,9 @@ Open before the first sweep point:
 
 - **No GPU run exists.** The CUDA, NCCL and fused-optimizer paths are written but not executed. The 2-process
   test uses the gloo backend on CPU. The cause of the 6-GPU crash in Kahlus-V1 was not reproduced.
-- **MrOS is not loadable.** `kahlus.nsrr` reads MESA and SHHS only. Issue #11 trains on MESA + MrOS.
+- **MrOS is not loadable.** `kahlus.nsrr` reads MESA and SHHS only. Issue #11 trains on MESA + MrOS and tests on SHHS.
+  The launcher trains on SHHS and scores held-out subjects only. Dataset-held-out scoring needs a second
+  loadable dataset (`TEST_DATASET`).
 - **MESA is sealed.** Without `KAHLUS_MESA=final`, the shards hold only the 25 exposed MESA nights. Pretraining
   on full MESA would break the seal in [`results/mesa_exposure.md`](results/mesa_exposure.md). This needs a decision.
 - **Two channels, not ten.** The shards hold C4 EEG and ECG, the pair MESA and SHHS share.

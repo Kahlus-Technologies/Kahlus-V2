@@ -79,11 +79,11 @@ It installs [Rex](https://www.superlogical.com/rex/docs/linux/remote-access) und
 **Pretrain and score a model** ([issue #11](https://github.com/Kahlus-Technologies/Kahlus-V2/issues/11)). This path needs PyTorch: `pip install -e '.[dev,train]'`.
 
 ```bash
-python -m kahlus.shards nsrr --cohorts mesa shhs --out /scratch/shards --jobs 32   # once: EDF to memory-mapped patch shards
-scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # all GPUs (DDP, bf16), then the benchmark
+python -m kahlus.shards nsrr --cohorts shhs --out /scratch/shards --jobs 32        # once: EDF to memory-mapped patch shards
+scripts/train_a100.sh 10m /scratch/shards /scratch/runs                            # all GPUs (DDP, bf16) on SHHS, then the benchmark
 ```
 
-Sizes are `10m`, `50m`, `200m` and `1b`. Run the same command again after a crash: training resumes from the newest checkpoint and gives the same losses as an uninterrupted run. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects and on a held-out dataset.
+Sizes are `10m`, `50m`, `200m` and `1b`. Run the same command again after a crash: training resumes from the newest checkpoint and gives the same losses as an uninterrupted run. The benchmark writes `benchmark.json` with a skill score, a shift control and a subject-bootstrap interval for each model, on held-out subjects. MrOS cannot be loaded and MESA is sealed, so there is no held-out dataset yet: with another loadable dataset, set `TEST_DATASET` to add that split.
 
 No GPU run exists yet, and this repo reports no model number from this path. The same pipeline runs on a laptop CPU with synthetic data:
 
