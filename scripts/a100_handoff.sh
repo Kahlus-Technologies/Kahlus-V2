@@ -136,7 +136,7 @@ stage_smoke() {
   in_env python -m kahlus.train --shards "$d/shards" --out "$d/run" --size tiny --train-datasets synth_a \
     --steps 200 --warmup 10 --context 8 --horizon 2 --workers 0
   in_env python -m kahlus.forecast_bench --ckpt "$d/run/ckpt-00000200.pt" --shards "$d/shards" \
-    --test-dataset synth_b --device "$dev" --out "$d/run/benchmark.json"
+    --test-dataset synth_b --gru-steps 300 --device "$dev" --out "$d/run/benchmark.json"  # a short GRU: this checks plumbing
   in_env python -m kahlus.run_env summary "$d/run"
   gpus=$(in_env python -c 'import torch; print(torch.cuda.device_count())')
   if ((NGPU > 1 && gpus >= NGPU)); then  # NCCL across all GPUs, before hours of fetch and training
