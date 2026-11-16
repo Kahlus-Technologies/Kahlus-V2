@@ -11,7 +11,8 @@
 #   preflight  stops unless exactly NGPU GPUs are visible; writes the environment record (always runs)
 #   smoke      synthetic data: a tiny model on 1 GPU (CPU when there is none), then 20 steps on NGPU GPUs
 #   fetch      NSRR data with your own ~/.nsrr_token: all MESA + SHHS-1 annotations, the 25 MESA EDFs of the
-#              dev slice and every SHHS-1 EDF. Stops first when the disk lacks FETCH_NEED_GB free
+#              dev slice and every SHHS-1 EDF. With SEIZEIT2=1 also the public SeizeIT2 seizure dataset
+#              (OpenNeuro ds005873, about 126 GB) into $WORK/seizeit2. Stops first when the disk is too small
 #   devslice   scripts/repro_dev_slice.sh on the dev slice: the 25 MESA EDFs and the first 25 SHHS-1 EDFs
 #   train10m   patch shards of every SHHS-1 night, then scripts/train_a100.sh 10m (4 passes over the training data)
 #   evidence   the zip to send back, from scripts/package_evidence.sh (always runs)
@@ -21,8 +22,10 @@
 #              can be made, else ~/kahlus-a100
 #   NSRR_ROOT  NSRR data (default $WORK/nsrr)
 #   N_SHHS_EDF SHHS-1 EDFs to fetch (default 0: all of them; 25 gives only the dev slice)
-#   FETCH_NEED_GB  free disk that the fetch needs, less what NSRR_ROOT holds already (default 1000;
+#   FETCH_NEED_GB  free disk that the NSRR fetch needs, less what NSRR_ROOT holds already (default 1000;
 #              MESA + SHHS are about 741 GB, and the shards need room too)
+#   SEIZEIT2=1 fetch SeizeIT2 too (no account needed; needs 130 GB free at WORK)
+#   (SeizeIT2 is fetched only: no stage reads it yet)
 #   NGPU       GPUs that the preflight expects and that training uses (default 8)
 #   DOCKER=1   run the Python stages in DOCKER_IMAGE (default pytorch/pytorch:2.9.1-cuda12.6-cudnn9-devel)
 #   The called scripts read their own settings: BOOTSTRAP, JOBS, THREADS (devslice), STEPS, WORKERS (train10m).
@@ -61,6 +64,7 @@ DEVSLICE=$WORK/devslice/handoff-$SHORT
 SHARDS=$WORK/shards/$SHORT  # per commit: a new commit never reuses another commit's shards or checkpoints
 RUN10M=$WORK/runs/$SHORT/kahlus-10m
 EVIDENCE=$WORK/kahlus-evidence-$SHORT.zip
+SEIZEIT2_DIR=$WORK/seizeit2
 
 # Runs a command with the stage Python first on PATH, on this host or in the container.
 in_env() {
@@ -165,19 +169,34 @@ fetch_missing() {
     done
   done
 }
-done_fetch() { [[ -z $(fetch_missing) ]]; }
+done_fetch() { [[ -z $(fetch_missing) ]] && [[ ${SEIZEIT2:-0} != 1 || -f $SEIZEIT2_DIR/.fetch-complete ]]; }
+
+# Stops unless the disk under a folder has room for a download, counting what the folder holds already.
+need_space() {
+  local dir=$1 gb=$2 what=$3 have_kb free_kb
+  mkdir -p "$dir"
+  have_kb=$(du -sk "$dir" | cut -f1)
+  free_kb=$(df -Pk "$dir" | awk 'NR == 2 { print $4 }')
+  ((free_kb + have_kb >= gb * 1048576)) || die "$what needs about $gb GB at $dir. It holds $((have_kb / 1048576)) GB" \
+    "and has $((free_kb / 1048576)) GB free. Set NSRR_ROOT or WORK to a larger disk, or set FETCH_NEED_GB if you know better"
+}
+
 stage_fetch() {
   [[ -s $HOME/.nsrr_token ]] || die "no ~/.nsrr_token: put your sleepdata.org token there. It stays on this machine"
-  local need_gb=${FETCH_NEED_GB:-1000} have_kb free_kb missing
-  have_kb=$(du -sk "$NSRR_ROOT" | cut -f1)
-  free_kb=$(df -Pk "$NSRR_ROOT" | awk 'NR == 2 { print $4 }')
-  ((free_kb + have_kb >= need_gb * 1048576)) || die "the fetch needs about $need_gb GB at $NSRR_ROOT" \
-    "(MESA + SHHS are about 741 GB, and the shards need room too). It holds $((have_kb / 1048576)) GB and has" \
-    "$((free_kb / 1048576)) GB free. Set NSRR_ROOT or WORK to a larger disk, or set FETCH_NEED_GB if you know better"
+  need_space "$NSRR_ROOT" "${FETCH_NEED_GB:-1000}" "The NSRR fetch (MESA + SHHS are about 741 GB, and the shards need room too)"
+  [[ ${SEIZEIT2:-0} != 1 ]] || need_space "$SEIZEIT2_DIR" 130 "SeizeIT2 (OpenNeuro ds005873, about 126 GB)"
   fetch_missing | while IFS= read -r f; do [[ $f == *_list.txt ]] || rm -f "$f"; done  # bad files download again
   N_SHHS_EDF=${N_SHHS_EDF:-0} "$REPO/scripts/nsrr_fetch_slice.sh"
+  local missing
   missing=$(fetch_missing | wc -l)
   ((missing == 0)) || die "$missing NSRR files are missing or not valid after the fetch: run again to retry them"
+  if [[ ${SEIZEIT2:-0} == 1 ]]; then
+    ensure_env
+    in_env aws --version >/dev/null 2>&1 || in_env python -m pip install -q awscli
+    # A public bucket: no account and no token. sync resumes and skips files that are already complete.
+    in_env aws s3 sync --no-sign-request --only-show-errors s3://openneuro.org/ds005873 "$SEIZEIT2_DIR"
+    touch "$SEIZEIT2_DIR/.fetch-complete"
+  fi
 }
 
 done_devslice() { grep -q '"status": "ok"' "$DEVSLICE/run_end.json" 2>/dev/null; }

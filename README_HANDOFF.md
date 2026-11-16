@@ -34,6 +34,8 @@ The captain gave these facts about the Chapman node. Nobody on the Kahlus side h
 
 All NSRR PSG cohorts together are about 5.2 TB, and MESA + SHHS alone are about 741 GB. This run fetches less than MESA + SHHS: all annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF. The fetch stage needs 1000 GB free (`FETCH_NEED_GB`), less what `NSRR_ROOT` holds already, so the SHHS-1 shards fit too. If the disk has less, the fetch stops before it downloads and tells you how much is free. The preflight writes the free disk at `WORK` and `NSRR_ROOT` to `preflight/disk.txt`.
 
+SeizeIT2 is optional. It is a public seizure dataset (OpenNeuro `ds005873`, 125.9 GB in 24,877 files on 2026-11-16). With `SEIZEIT2=1`, the fetch stage also downloads it to `WORK/seizeit2` from the public OpenNeuro S3 bucket (`aws s3 sync --no-sign-request`). It needs no account. The script installs the AWS CLI in its Python environment if it is not there, and it stops first unless `WORK` has 130 GB free. No stage reads SeizeIT2 yet: the download only puts it on the node for later work.
+
 With 640 GB of RAM, the shard build runs 32 processes, and the page cache holds the memory-mapped SHHS-1 shards.
 
 ## What you need
@@ -93,7 +95,7 @@ kahlus-v2/scripts/a100_handoff.sh verify preflight smoke
 | `verify` | Checks `SHA256SUMS` (the package files), `HANDOFF_SHA256SUMS` (every repo file), that no file changed since checkout, and the commit | `verify.txt` | never |
 | `preflight` | Stops unless PyTorch sees exactly 8 GPUs (`NGPU`). Records the GPUs and versions. Builds the Python environment the first time | `preflight/environment.json`, `preflight/nvidia-smi.txt` | never |
 | `smoke` | Tiny model on synthetic data: 200 steps on 1 GPU and a benchmark, then 20 steps on all 8 GPUs | `smoke/run/summary.md`, `smoke/ddp/` | `smoke/run/summary.md` and `benchmark.json` exist |
-| `fetch` | Downloads all MESA and SHHS-1 annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF, with your `~/.nsrr_token`. Stops first if the disk is too small | `nsrr/` | every file on the fetch lists is present and starts like an EDF or an NSRR XML file |
+| `fetch` | Downloads all MESA and SHHS-1 annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF, with your `~/.nsrr_token`. With `SEIZEIT2=1`, also SeizeIT2. Stops first if the disk is too small | `nsrr/`, `seizeit2/` | every file on the fetch lists is present and starts like an EDF or an NSRR XML file, and the SeizeIT2 download finished if `SEIZEIT2=1` |
 | `devslice` | Runs every dev-slice study (`scripts/repro_dev_slice.sh`) on the 25 MESA EDFs and the first 25 SHHS-1 EDFs | `devslice/handoff-<sha>/` | its `run_end.json` says `ok` |
 | `train10m` | Builds patch shards of every SHHS-1 night, then runs `scripts/train_a100.sh 10m`: preflight, 8-GPU training (about 4,500 optimizer steps by our estimate), benchmark, summary | `shards/<sha>/`, `runs/<sha>/kahlus-10m/` | `runs/<sha>/kahlus-10m/summary.md` and `benchmark.json` exist |
 | `evidence` | Packs the results zip | `kahlus-evidence-<sha>.zip` | never |
@@ -106,7 +108,8 @@ Other settings:
 
 - `NGPU` (default 8): the GPUs that the preflight expects and that training uses. Use `CUDA_VISIBLE_DEVICES` to hide GPUs.
 - `N_SHHS_EDF` (default 0, which means all): the SHHS-1 EDFs to fetch. With `N_SHHS_EDF=25`, the fetch gets only the dev slice (about 7 GB), and the 10M run trains on 25 nights.
-- `FETCH_NEED_GB` (default 1000): the free disk that the fetch needs.
+- `FETCH_NEED_GB` (default 1000): the free disk that the NSRR fetch needs.
+- `SEIZEIT2=1`: also fetch SeizeIT2. See [The machine](#the-machine).
 - `JOBS`, `THREADS`, `BOOTSTRAP` go to `scripts/repro_dev_slice.sh`. `STEPS` and `WORKERS` go to `scripts/train_a100.sh`. Their headers explain them.
 
 ## The Docker path
