@@ -3,12 +3,15 @@
 #
 #   scripts/package_evidence.sh <work-dir> <out.zip>
 #
-# Takes only text records from <work-dir>: summaries, metrics, configs, environment records,
+# Takes only the run outputs of a100_handoff.sh in <work-dir> (verify.txt, preflight/, smoke/, devslice/,
+# runs/, logs/), and of those only text records: summaries, metrics, configs, environment records,
 # manifests and logs (.json .jsonl .md .txt .tsv .log .csv, each at most 20 MB).
-# It never takes checkpoints, data, tokens, keys or .env files. Python environments, NSRR data,
-# shards and feature caches are skipped as whole directories. A file that holds the value of
-# ~/.nsrr_token or a private key block is skipped too. The zip lists every file it holds with its
-# SHA-256 in MANIFEST.sha256, and every skipped file with the reason in EXCLUDED.txt.
+# It never takes checkpoints, data, tokens, keys or .env files: it skips them by file name, and it skips
+# every file whose text holds the value of ~/.nsrr_token, a private key block, a known token format or a
+# KEY=value style secret. Python environments, NSRR data, shards and feature caches are skipped as whole
+# directories. Symlinks, special files, unreadable files and odd file names are skipped, never fatal.
+# The zip lists every file it holds with its SHA-256 in MANIFEST.sha256, and every skipped path with the
+# reason in EXCLUDED.txt.
 set -euo pipefail
 
 if (($# != 2)); then
@@ -22,76 +25,102 @@ import fnmatch
 import hashlib
 import os
 import re
+import stat
 import sys
 import zipfile
 from pathlib import Path
 
+RUN_OUTPUTS = {"verify.txt", "preflight", "smoke", "devslice", "runs", "logs"}
 KEEP_SUFFIXES = {".json", ".jsonl", ".md", ".txt", ".tsv", ".log", ".csv"}
 MAX_BYTES = 20 * 1024 * 1024
-SKIP_DIRS = ["venv*", "nsrr", "shards", "*.partial", "cache", "home", "__pycache__", ".git"]
-SECRET = [".env", ".env.*", "*.env", "*token*", "*secret*", "*password*", "*passwd*", "pw.txt", ".netrc",
-          "*.pem", "*.key", "*.p12", "id_rsa*", "id_ed25519*", "id_ecdsa*", "id_dsa*", "credentials*"]
+SKIP_DIRS = ["venv*", "nsrr*", "shards", "*.partial", "cache", "home", "__pycache__", ".git"]
+SECRET = [".env", ".env.*", "*.env", "*token*", "*secret*", "*password*", "*passwd*", "pw.txt", ".netrc", "*key*",
+          "*credential*", "*.pem", "*.p12", "id_rsa*", "id_ed25519*", "id_ecdsa*", "id_dsa*"]
 CHECKPOINT = ["ckpt-*", "*.pt", "*.pt.tmp", "*.pth", "*.ckpt", "*.safetensors"]
-DATA = ["*.edf", "*.xml", "*.npy", "*.npz", "*_per_subject.jsonl"]  # NSRR data and data derived per night
-PRIVATE_KEY = re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+DATA = ["*.edf", "*.xml", "*.npy", "*.npz", "*_per_subject.jsonl", "*-dataset-*.csv"]  # NSRR data, per night or per subject
+SECRET_TEXT = re.compile(
+    rb"-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    rb"|\b(?:tskey-[a-z]+-|hf_|gh[opsur]_|github_pat_|glpat-|xox[abprs]-|sk-)[A-Za-z0-9_-]{16,}"
+    rb"|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"
+    rb"|(?i:[a-z0-9_]*(?:token|secret|api_?key|access_?key|password)[a-z0-9_]*[\"']?\s*[=:]\s*[\"']?[^\s\"',}]{8,})")
+ODD_NAME = re.compile(r"[\x00-\x1f\x7f]|[\ud800-\udfff]")
 
 
 def matches(name, patterns):
     return any(fnmatch.fnmatch(name.lower(), p) for p in patterns)
 
 
-def reason(path, body_check):
+def shown(rel):
+    return ascii(rel.as_posix())[1:-1]  # EXCLUDED.txt stays one line per path, whatever the name holds
+
+
+def check(path, token):
+    """Return (reason to skip, None) or (None, file body)."""
     name = path.name
+    if ODD_NAME.search(name):
+        return "odd file name", None
     for label, patterns in (("secret", SECRET), ("checkpoint", CHECKPOINT), ("data", DATA)):
         if matches(name, patterns):
-            return label
+            return label, None
     if path.suffix.lower() not in KEEP_SUFFIXES:
-        return "not a text record"
-    if path.stat().st_size > MAX_BYTES:
-        return "larger than 20 MB"
-    return body_check(path.read_bytes())
+        return "not a text record", None
+    try:
+        st = path.lstat()
+        if not stat.S_ISREG(st.st_mode):
+            return "not a regular file", None
+        if st.st_size > MAX_BYTES:
+            return "larger than 20 MB", None
+        body = path.read_bytes()
+    except OSError as exc:
+        return f"unreadable ({exc.strerror})", None
+    if token and token in body:
+        return "holds the NSRR token", None
+    if SECRET_TEXT.search(body):
+        return "holds a secret", None
+    return None, body
 
 
 def main(work, out):
     work, out = Path(work).resolve(), Path(out).resolve()
     token_file = Path.home() / ".nsrr_token"
-    token = token_file.read_bytes().strip() if token_file.is_file() else b""
-
-    def body_check(body):
-        if token and token in body:
-            return "holds the NSRR token"
-        if PRIVATE_KEY.search(body):
-            return "holds a private key"
-        return None
+    try:
+        token = token_file.read_bytes().strip()
+    except OSError:
+        token = b""
 
     top = out.stem
     kept, skipped = [], []
     for root, dirs, files in os.walk(work):
         rel_root = Path(root).relative_to(work)
-        for d in sorted(dirs):
-            if matches(d, SKIP_DIRS):
-                skipped.append((rel_root / d, "skipped directory"))
-        dirs[:] = sorted(d for d in dirs if not matches(d, SKIP_DIRS))
-        for f in sorted(files):
-            path = Path(root) / f
-            if path == out or path.is_symlink():
+        entries = sorted(dirs + files)
+        dirs[:] = []
+        for name in entries:
+            path, rel = Path(root) / name, rel_root / name
+            if path == out:
                 continue
-            why = reason(path, body_check)
-            if why:
-                skipped.append((rel_root / f, why))
+            if rel_root == Path(".") and name not in RUN_OUTPUTS:
+                skipped.append((rel, "not a run output"))
+            elif path.is_symlink():
+                skipped.append((rel, "symlink"))
+            elif path.is_dir():
+                if matches(name, SKIP_DIRS):
+                    skipped.append((rel, "skipped directory"))
+                else:
+                    dirs.append(name)
             else:
-                kept.append(rel_root / f)
+                why, body = check(path, token)
+                if why:
+                    skipped.append((rel, why))
+                else:
+                    kept.append((rel, body))
 
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.name + ".tmp")
-    manifest = []
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
-        for rel in kept:
-            body = (work / rel).read_bytes()
-            manifest.append(f"{hashlib.sha256(body).hexdigest()}  {rel.as_posix()}\n")
+        for rel, body in kept:
             z.writestr(f"{top}/{rel.as_posix()}", body)
-        z.writestr(f"{top}/MANIFEST.sha256", "".join(manifest))
-        z.writestr(f"{top}/EXCLUDED.txt", "".join(f"{rel.as_posix()}\t{why}\n" for rel, why in skipped))
+        z.writestr(f"{top}/MANIFEST.sha256", "".join(f"{hashlib.sha256(b).hexdigest()}  {r.as_posix()}\n" for r, b in kept))
+        z.writestr(f"{top}/EXCLUDED.txt", "".join(f"{shown(rel)}\t{why}\n" for rel, why in skipped))
     os.replace(tmp, out)
     print(f"{out}: {len(kept)} files, {out.stat().st_size // 1024} KB; {len(skipped)} skipped (see EXCLUDED.txt)")
 

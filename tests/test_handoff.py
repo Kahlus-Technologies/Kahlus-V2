@@ -26,20 +26,27 @@ def test_evidence_zip_keeps_records_and_drops_secrets_checkpoints_and_data(tmp_p
             "runs/kahlus-10m/log.jsonl", "runs/kahlus-10m/benchmark.json", "devslice/r/steps.tsv",
             "devslice/r/discovery/ids_shhs.txt"]
     drop_files = {
-        ".env": "secret", "config.env": "secret", "logs/.nsrr_token": "secret", "api_token.txt": "secret",
-        "id_ed25519": "secret", "server.key": "secret", "cert.pem": "secret", "pw.txt": "secret",
+        "logs/.env": "secret", "logs/config.env": "secret", "logs/.nsrr_token": "secret", "runs/api_token.txt": "secret",
+        "logs/id_ed25519": "secret", "logs/server.key": "secret", "logs/cert.pem": "secret", "logs/pw.txt": "secret",
+        "logs/ts-key.txt": "secret", "logs/accessKeys.csv": "secret",
         "runs/kahlus-10m/ckpt-00000020.pt": "checkpoint", "runs/kahlus-10m/ckpt-00000040.pt.tmp": "checkpoint",
-        "census/mesa_per_subject.jsonl": "data", "night.edf": "data",
-        "logs/fetch.log": "holds the NSRR token", "logs/ssh.log": "holds a private key",
-        "runs/kahlus-10m/curve.png": "not a text record",
+        "devslice/r/census/mesa_per_subject.jsonl": "data", "runs/night.edf": "data", "logs/shhs1-dataset-0.21.0.csv": "data",
+        "logs/fetch.log": "holds the NSRR token", "logs/ssh.log": "holds a secret", "logs/env.log": "holds a secret",
+        "logs/hf.log": "holds a secret", "runs/kahlus-10m/curve.png": "not a text record",
+        "logs/bad\nname.log": "odd file name",
     }
-    drop_dirs = ["venv-host", "nsrr", "shards", "devslice/r/bench/cache"]
-    for rel in [*keep, *drop_files]:
+    drop_dirs = ["runs/venv-host", "smoke/shards", "devslice/r/bench/cache"]
+    stray = ["ts-key.txt", ".env", "venv-host", "nsrr", "NSRR-data", "shards", "home"]  # in WORK, outside the run outputs
+    for rel in [*keep, *drop_files, *stray]:
         _write(work / rel)
     for rel in drop_dirs:
         _write(work / rel / "inside.json")
     _write(work / "logs/fetch.log", f"GET https://sleepdata.org/?auth_token={TOKEN}\n")
     _write(work / "logs/ssh.log", "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n")
+    _write(work / "logs/env.log", "WANDB_API_KEY=0123456789abcdef\n")
+    _write(work / "logs/hf.log", "login with hf_abcdefghijklmnopqrstuvwxyz0123\n")
+    (work / "logs/token-link.json").symlink_to(home / ".nsrr_token")
+    os.mkfifo(work / "logs/stuck.log")
 
     out = work / "kahlus-evidence-abc.zip"
     r = subprocess.run([str(REPO / "scripts/package_evidence.sh"), str(work), str(out)],
@@ -52,7 +59,9 @@ def test_evidence_zip_keeps_records_and_drops_secrets_checkpoints_and_data(tmp_p
         manifest = z.read("kahlus-evidence-abc/MANIFEST.sha256").decode()
         assert all(TOKEN.encode() not in z.read(n) for n in z.namelist())
     assert names == set(keep) | {"MANIFEST.sha256", "EXCLUDED.txt"}
-    assert excluded == drop_files | dict.fromkeys(drop_dirs, "skipped directory")
+    assert excluded == ({k.replace("\n", "\\n"): v for k, v in drop_files.items()} | dict.fromkeys(drop_dirs, "skipped directory")
+                        | dict.fromkeys(stray, "not a run output")
+                        | {"logs/token-link.json": "symlink", "logs/stuck.log": "not a regular file"})
     assert sorted(line.split("  ")[1] for line in manifest.splitlines()) == sorted(keep)
 
 
