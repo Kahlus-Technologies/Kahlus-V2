@@ -70,7 +70,8 @@ def batch_for_data(n_windows: int) -> int:
 
 def plan_run(args: argparse.Namespace, n_patches: int, world: int) -> float:
     """Fill ``--accum``, ``--weight-decay`` and ``--steps`` where they are unset, from the size of the training
-    data. Return how many times the run reads that data."""
+    data, and cap ``--warmup`` at a tenth of the steps so a short run still reaches the peak and starts the decay.
+    Return how many times the run reads that data."""
     if args.accum is None:
         args.accum = max(1, math.ceil(batch_for_data(n_patches // args.context) / (args.batch * world)))
     if args.weight_decay is None:
@@ -78,6 +79,7 @@ def plan_run(args: argparse.Namespace, n_patches: int, world: int) -> float:
     patches_per_step = args.accum * args.batch * world * args.context
     if args.steps is None:
         args.steps = max(1, int(args.max_epochs * n_patches / patches_per_step))
+    args.warmup = max(1, min(args.warmup, args.steps // 10))
     return args.steps * patches_per_step / n_patches
 
 
@@ -170,7 +172,8 @@ def main(argv=None) -> None:
         kept = [ln for ln in (log_path.read_text().splitlines() if log_path.exists() else []) if json.loads(ln)["step"] <= start]
         log_path.write_text("".join(ln + "\n" for ln in kept))
         print(f"{args.size}: {n_params(model):,} parameters, world={world}, device={device}, bf16={amp}, start step {start}, "
-              f"{args.batch * args.accum * world} windows per step, weight decay {args.weight_decay:g}, {epochs:.2f} passes over the data", flush=True)
+              f"{args.batch * args.accum * world} windows per step, weight decay {args.weight_decay:g}, warm-up {args.warmup} steps, "
+              f"{epochs:.2f} passes over the data", flush=True)
         if epochs > args.max_epochs:
             print(f"WARNING: this run reads the training data {epochs:.1f} times. Past about {args.max_epochs:g} passes, repeated data "
                   "adds little (arXiv 2305.16264). Use fewer steps or more data.", flush=True)

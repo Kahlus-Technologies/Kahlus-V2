@@ -274,6 +274,19 @@ def test_defaults_tie_decay_to_lr_and_batch_to_data_and_warn_on_repetition(shard
     assert 3 <= seconds / 2000 <= 4 and "WARNING" not in capsys.readouterr().out  # at most 4 passes, and nearly 4
 
 
+def test_short_run_still_reaches_the_peak_and_ends_at_a_tenth(shard_dir, tmp_path, monkeypatch, capsys):
+    for name in ("KAHLUS_MESA", "WORLD_SIZE", "RANK", "LOCAL_RANK"):
+        monkeypatch.delenv(name, raising=False)
+    args = ["--shards", str(shard_dir), "--size", "tiny", "--train-datasets", "synth_a", "--batch", "8", "--context", "8",
+            "--horizon", "2", "--workers", "0", "--lr", "6e-4", "--log-every", "1", "--out", str(tmp_path / "short")]  # default --warmup 1000, derived steps
+    train.main(args)
+    ident = torch.load(train.latest_checkpoint(tmp_path / "short"), weights_only=True)["identity"]
+    lrs = [json.loads(ln)["lr"] for ln in (tmp_path / "short" / "log.jsonl").read_text().splitlines()]
+    assert len(lrs) == ident["steps"] < 1000 and 1 <= ident["warmup"] <= ident["steps"] // 10
+    assert f"warm-up {ident['warmup']} steps" in capsys.readouterr().out
+    assert max(lrs) == pytest.approx(6e-4) and lrs[-1] == pytest.approx(6e-5)
+
+
 def test_run_directory_records_its_environment_and_scope(reference_run):
     (start,) = json.loads((reference_run / "environment.json").read_text())
     assert start["start_step"] == 0 and start["torch"] == torch.__version__ and start["gpu_count"] == torch.cuda.device_count()
