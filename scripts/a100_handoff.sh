@@ -63,7 +63,7 @@ COMMIT=$(git -C "$REPO" rev-parse HEAD 2>/dev/null || cat "$PKG/COMMIT_HASH.txt"
 SHORT=${COMMIT:0:12}
 DEVSLICE=$WORK/devslice/handoff-$SHORT
 TRAIN_KEY="$COMMIT n_shhs_edf=$N_SHHS_EDF ngpu=$NGPU docker=$DOCKER steps=${STEPS:-auto} workers=${WORKERS:-6} train_datasets=${TRAIN_DATASETS:-shhs}"
-SETTINGS="$TRAIN_KEY n_edf=$N_EDF seizeit2=${SEIZEIT2:-0}"
+SETTINGS="$TRAIN_KEY n_edf=$N_EDF bootstrap=${BOOTSTRAP:-claim} seizeit2=${SEIZEIT2:-0}"
 SHARDS=$WORK/shards/$SHORT-n$N_SHHS_EDF  # per commit and SHHS-1 night count: other settings never reuse these shards
 RUN10M=$WORK/runs/$SHORT-$(printf %s "$TRAIN_KEY" | sha256sum | cut -c1-8)/kahlus-10m  # per setting: other settings never resume or replace this run
 
@@ -71,8 +71,8 @@ RUN10M=$WORK/runs/$SHORT-$(printf %s "$TRAIN_KEY" | sha256sum | cut -c1-8)/kahlu
 stage_key() {
   case $1 in
     smoke) echo "$COMMIT ngpu=$NGPU docker=$DOCKER" ;;
-    fetch) echo "$COMMIT n_shhs_edf=$N_SHHS_EDF seizeit2=${SEIZEIT2:-0}" ;;
-    devslice) echo "$COMMIT n_edf=$N_EDF docker=$DOCKER" ;;
+    fetch) echo "$COMMIT n_edf=$N_EDF n_shhs_edf=$N_SHHS_EDF seizeit2=${SEIZEIT2:-0}" ;;
+    devslice) echo "$COMMIT n_edf=$N_EDF bootstrap=${BOOTSTRAP:-claim} docker=$DOCKER" ;;
     train10m) echo "$TRAIN_KEY" ;;
     *) echo "$COMMIT" ;;
   esac
