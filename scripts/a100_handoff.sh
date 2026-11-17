@@ -62,9 +62,21 @@ if [[ $DOCKER == 1 ]]; then VENV=$WORK/venv-docker; else VENV=$WORK/venv-host; f
 COMMIT=$(git -C "$REPO" rev-parse HEAD 2>/dev/null || cat "$PKG/COMMIT_HASH.txt" 2>/dev/null || echo unknown)
 SHORT=${COMMIT:0:12}
 DEVSLICE=$WORK/devslice/handoff-$SHORT
-SETTINGS="$COMMIT n_shhs_edf=$N_SHHS_EDF n_edf=$N_EDF ngpu=$NGPU seizeit2=${SEIZEIT2:-0}"
-SHARDS=$WORK/shards/$SHORT-n$N_SHHS_EDF  # per commit and SHHS-1 night count: other settings never reuse these shards or checkpoints
-RUN10M=$WORK/runs/$SHORT-n$N_SHHS_EDF-g$NGPU/kahlus-10m
+TRAIN_KEY="$COMMIT n_shhs_edf=$N_SHHS_EDF ngpu=$NGPU docker=$DOCKER steps=${STEPS:-auto} workers=${WORKERS:-6} train_datasets=${TRAIN_DATASETS:-shhs}"
+SETTINGS="$TRAIN_KEY n_edf=$N_EDF seizeit2=${SEIZEIT2:-0}"
+SHARDS=$WORK/shards/$SHORT-n$N_SHHS_EDF  # per commit and SHHS-1 night count: other settings never reuse these shards
+RUN10M=$WORK/runs/$SHORT-$(printf %s "$TRAIN_KEY" | sha256sum | cut -c1-8)/kahlus-10m  # per setting: other settings never resume or replace this run
+
+# The settings that change a stage's outputs: a finished stage is skipped only when these are unchanged.
+stage_key() {
+  case $1 in
+    smoke) echo "$COMMIT ngpu=$NGPU docker=$DOCKER" ;;
+    fetch) echo "$COMMIT n_shhs_edf=$N_SHHS_EDF seizeit2=${SEIZEIT2:-0}" ;;
+    devslice) echo "$COMMIT n_edf=$N_EDF docker=$DOCKER" ;;
+    train10m) echo "$TRAIN_KEY" ;;
+    *) echo "$COMMIT" ;;
+  esac
+}
 EVIDENCE=$WORK/kahlus-evidence-$SHORT.zip
 SEIZEIT2_DIR=$WORK/seizeit2
 
@@ -76,7 +88,7 @@ in_env() {
     docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
       --user "$(id -u):$(id -g)" "${mounts[@]}" -w "$REPO" -e HOME="$WORK/home" -e PYTHONUNBUFFERED=1 \
       -e KAHLUS_DOCKER_IMAGE="$IMAGE" -e NSRR_ROOT -e NGPU -e CUDA_VISIBLE_DEVICES -e KAHLUS_MESA \
-      -e BOOTSTRAP -e JOBS -e THREADS -e STEPS -e WORKERS -e OMP_NUM_THREADS -e PIP_INDEX_URL -e PIP_EXTRA_INDEX_URL \
+      -e BOOTSTRAP -e JOBS -e THREADS -e STEPS -e WORKERS -e TRAIN_DATASETS -e OMP_NUM_THREADS -e PIP_INDEX_URL -e PIP_EXTRA_INDEX_URL \
       "$IMAGE" bash -c 'export PATH="$0/bin:$PATH"; exec "$@"' "$VENV" "$@"
   else
     (export PATH="$VENV/bin:$PATH"; "$@")
@@ -201,17 +213,22 @@ stage_fetch() {
   fi
 }
 
-done_devslice() { grep -q '"status": "ok"' "$DEVSLICE/run_end.json" 2>/dev/null; }
-stage_devslice() {
-  local view=$WORK/devslice-shhs list=$NSRR_ROOT/shhs/edf_list.txt
-  ensure_env
-  # The dev slice is every SHHS-1 annotation and the first 25 EDFs on the fetch list. Links give
-  # repro_dev_slice.sh exactly that as its SHHS root, even when NSRR_ROOT holds the whole cohort.
+# SHHS-1 root of links: every annotation and the first N EDFs on the fetch list, even when NSRR_ROOT holds
+# the whole cohort.
+shhs_view() {
+  local view=$1 n=$2 list=$NSRR_ROOT/shhs/edf_list.txt
   rm -rf "$view"
   mkdir -p "$view"
   find "$NSRR_ROOT/shhs" -maxdepth 1 -name '*.xml' -exec ln -s -t "$view" {} +
   if [[ -s $list ]]; then sed 's#.*/##' "$list"; else find "$NSRR_ROOT/shhs" -maxdepth 1 -name '*.edf' -printf '%f\n' | sort; fi |
-    sed -n "1,${N_EDF:-25}p" | while IFS= read -r f; do ln -s "$NSRR_ROOT/shhs/$f" "$view/$f"; done
+    sed -n "1,${n}p" | while IFS= read -r f; do ln -s "$NSRR_ROOT/shhs/$f" "$view/$f"; done
+}
+
+done_devslice() { grep -q '"status": "ok"' "$DEVSLICE/run_end.json" 2>/dev/null; }
+stage_devslice() {
+  local view=$WORK/devslice-shhs
+  ensure_env
+  shhs_view "$view" "${N_EDF:-25}"
   [[ ! -e $DEVSLICE ]] || mv "$DEVSLICE" "$DEVSLICE.failed-$(date +%s)"  # repro_dev_slice.sh needs a new directory
   in_env env OUT_BASE="$WORK/devslice" NSRR_SHHS_ROOT="$view" PYTHON=python "$REPO/scripts/repro_dev_slice.sh" "${DEVSLICE##*/}"
 }
@@ -220,8 +237,13 @@ done_train10m() { [[ -s $RUN10M/summary.md && -s $RUN10M/benchmark.json ]]; }
 stage_train10m() {
   ensure_env
   if [[ ! -s $SHARDS/index.json ]]; then
+    local root=()
+    if ((N_SHHS_EDF > 0)); then  # nsrr shards reads every EDF on disk: give it only the first N
+      shhs_view "$WORK/shards-shhs-view" "$N_SHHS_EDF"
+      root=(NSRR_SHHS_ROOT="$WORK/shards-shhs-view")
+    fi
     rm -rf "$SHARDS.partial"
-    in_env python -m kahlus.shards nsrr --cohorts shhs --out "$SHARDS.partial" --jobs 32
+    in_env env "${root[@]}" python -m kahlus.shards nsrr --cohorts shhs --out "$SHARDS.partial" --jobs 32
     mv "$SHARDS.partial" "$SHARDS"
   fi
   in_env env DOCKER=0 "$REPO/scripts/train_a100.sh" 10m "$SHARDS" "${RUN10M%/*}"
@@ -229,6 +251,7 @@ stage_train10m() {
 
 stage_evidence() {
   rm -f "$EVIDENCE"
+  printf 'settings: %s\ncurrent 10M run: %s\n' "$SETTINGS" "${RUN10M#"$WORK"/}" > "$WORK/logs/run-settings.txt"
   "$REPO/scripts/package_evidence.sh" "$WORK" "$EVIDENCE"
 }
 
@@ -255,14 +278,14 @@ echo "commit $COMMIT | WORK=$WORK | NSRR_ROOT=$NSRR_ROOT | NGPU=$NGPU | DOCKER=$
 for s in "${STAGES[@]}"; do
   [[ " ${want[*]} " == *" $s "* ]] || continue
   current=$s
-  if declare -F "done_$s" >/dev/null && [[ $(cat "$WORK/state/$s.ok" 2>/dev/null) == "$SETTINGS" ]] && "done_$s"; then
+  if declare -F "done_$s" >/dev/null && [[ $(cat "$WORK/state/$s.ok" 2>/dev/null) == "$(stage_key "$s")" ]] && "done_$s"; then
     echo "skip $s: its outputs verify"
     continue
   fi
   rm -f "$WORK/state/$s.ok"
   echo "== $s $(date -u +%FT%TZ)" | tee -a "$WORK/logs/$s.log"
   "stage_$s" 2>&1 | tee -a "$WORK/logs/$s.log"
-  echo "$SETTINGS" > "$WORK/state/$s.ok"
+  stage_key "$s" > "$WORK/state/$s.ok"
 done
 current=""
 [[ " ${want[*]} " != *" evidence "* ]] || echo "Send this file back: $EVIDENCE"

@@ -97,10 +97,10 @@ kahlus-v2/scripts/a100_handoff.sh verify preflight smoke
 | `smoke` | Tiny model on synthetic data: 200 steps on 1 GPU and a benchmark, then 20 steps on all 8 GPUs | `smoke/run/summary.md`, `smoke/ddp/` | `smoke/run/summary.md` and `benchmark.json` exist |
 | `fetch` | Downloads all MESA and SHHS-1 annotations, the 25 MESA EDFs of the dev slice and every SHHS-1 EDF, with your `~/.nsrr_token`. With `SEIZEIT2=1`, also SeizeIT2. Stops first if the disk is too small | `nsrr/`, `seizeit2/` | every file on the fetch lists is present and starts like an EDF or an NSRR XML file, and the SeizeIT2 download finished if `SEIZEIT2=1` |
 | `devslice` | Runs every dev-slice study (`scripts/repro_dev_slice.sh`) on the 25 MESA EDFs and the first 25 SHHS-1 EDFs | `devslice/handoff-<sha>/` | its `run_end.json` says `ok` |
-| `train10m` | Builds patch shards of every SHHS-1 night, then runs `scripts/train_a100.sh 10m`: preflight, 8-GPU training (about 4,500 optimizer steps by our estimate), benchmark, summary | `shards/<sha>-n<N_SHHS_EDF>/`, `runs/<sha>-n<N_SHHS_EDF>-g<NGPU>/kahlus-10m/` | `runs/<sha>-n<N_SHHS_EDF>-g<NGPU>/kahlus-10m/summary.md` and `benchmark.json` exist |
+| `train10m` | Builds patch shards of the SHHS-1 nights (the first `N_SHHS_EDF`, or all), then runs `scripts/train_a100.sh 10m`: preflight, 8-GPU training (about 4,500 optimizer steps by our estimate), benchmark, summary | `shards/<sha>-n<N_SHHS_EDF>/`, `runs/<sha>-<settings hash>/kahlus-10m/` | `summary.md` and `benchmark.json` exist in that run folder |
 | `evidence` | Packs the results zip | `kahlus-evidence-<sha>.zip` | never |
 
-A stage is skipped only if it finished for the same commit. Each stage writes its log to `logs/<stage>.log`.
+A stage is skipped only if it finished for the same commit and the same settings that stage uses (for example `STEPS`, `WORKERS` and `TRAIN_DATASETS` for `train10m`, `N_EDF` for `devslice`). A run with other settings starts a new folder in `runs/`. Each stage writes its log to `logs/<stage>.log`.
 
 If you already have the NSRR data in the same layout as the fetch (one folder per cohort, with all files in it), set `NSRR_ROOT` to that folder and leave out `fetch`.
 
@@ -142,7 +142,8 @@ The script installs Rex in `~/.local/bin` and runs it as your user. It needs no 
 The evidence zip contains only text records from the run outputs in `WORK`:
 
 - `verify.txt`, `preflight/environment.json`, `preflight/disk.txt`, `preflight/nvidia-smi.txt`
-- `smoke/run/` and `runs/<sha>-n<N_SHHS_EDF>-g<NGPU>/kahlus-10m/`: `summary.md`, `log.jsonl`, `environment.json`, `benchmark.json`
+- `logs/run-settings.txt`: the settings of this run and the path of its 10M run folder. Older runs in `runs/` stay in the zip, but this file says which one is current
+- `smoke/run/` and `runs/<sha>-<settings hash>/kahlus-10m/`: `summary.md`, `log.jsonl`, `environment.json`, `benchmark.json`
 - `devslice/handoff-<sha>/`: `run.json`, `run_end.json`, `steps.tsv`, the study results, the discovery manifests and the logs
 - `logs/<stage>.log` for each stage
 - `MANIFEST.sha256`, with the SHA-256 of each file in the zip
