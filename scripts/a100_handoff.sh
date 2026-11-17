@@ -55,14 +55,16 @@ mkdir -p "${NSRR_ROOT:=$WORK/nsrr}"
 NSRR_ROOT=$(cd "$NSRR_ROOT" && pwd -P)  # repro_dev_slice.sh and docker -v need an absolute path
 export NSRR_ROOT
 export NGPU=${NGPU:-8}
+export N_SHHS_EDF=${N_SHHS_EDF:-0} N_EDF=${N_EDF:-25}
 DOCKER=${DOCKER:-0}
 IMAGE=${DOCKER_IMAGE:-pytorch/pytorch:2.9.1-cuda12.6-cudnn9-devel}
 if [[ $DOCKER == 1 ]]; then VENV=$WORK/venv-docker; else VENV=$WORK/venv-host; fi
 COMMIT=$(git -C "$REPO" rev-parse HEAD 2>/dev/null || cat "$PKG/COMMIT_HASH.txt" 2>/dev/null || echo unknown)
 SHORT=${COMMIT:0:12}
 DEVSLICE=$WORK/devslice/handoff-$SHORT
-SHARDS=$WORK/shards/$SHORT  # per commit: a new commit never reuses another commit's shards or checkpoints
-RUN10M=$WORK/runs/$SHORT/kahlus-10m
+SETTINGS="$COMMIT n_shhs_edf=$N_SHHS_EDF n_edf=$N_EDF ngpu=$NGPU seizeit2=${SEIZEIT2:-0}"
+SHARDS=$WORK/shards/$SHORT-n$N_SHHS_EDF  # per commit and SHHS-1 night count: other settings never reuse these shards or checkpoints
+RUN10M=$WORK/runs/$SHORT-n$N_SHHS_EDF-g$NGPU/kahlus-10m
 EVIDENCE=$WORK/kahlus-evidence-$SHORT.zip
 SEIZEIT2_DIR=$WORK/seizeit2
 
@@ -253,14 +255,14 @@ echo "commit $COMMIT | WORK=$WORK | NSRR_ROOT=$NSRR_ROOT | NGPU=$NGPU | DOCKER=$
 for s in "${STAGES[@]}"; do
   [[ " ${want[*]} " == *" $s "* ]] || continue
   current=$s
-  if declare -F "done_$s" >/dev/null && [[ $(cat "$WORK/state/$s.ok" 2>/dev/null) == "$COMMIT" ]] && "done_$s"; then
+  if declare -F "done_$s" >/dev/null && [[ $(cat "$WORK/state/$s.ok" 2>/dev/null) == "$SETTINGS" ]] && "done_$s"; then
     echo "skip $s: its outputs verify"
     continue
   fi
   rm -f "$WORK/state/$s.ok"
   echo "== $s $(date -u +%FT%TZ)" | tee -a "$WORK/logs/$s.log"
   "stage_$s" 2>&1 | tee -a "$WORK/logs/$s.log"
-  echo "$COMMIT" > "$WORK/state/$s.ok"
+  echo "$SETTINGS" > "$WORK/state/$s.ok"
 done
 current=""
 [[ " ${want[*]} " != *" evidence "* ]] || echo "Send this file back: $EVIDENCE"
