@@ -229,8 +229,10 @@ stage_devslice() {
   local view=$WORK/devslice-shhs
   ensure_env
   shhs_view "$view" "${N_EDF:-25}"
-  [[ ! -e $DEVSLICE ]] || mv "$DEVSLICE" "$DEVSLICE.failed-$(date +%s)"  # repro_dev_slice.sh needs a new directory
-  in_env env OUT_BASE="$WORK/devslice" NSRR_SHHS_ROOT="$view" PYTHON=python "$REPO/scripts/repro_dev_slice.sh" "${DEVSLICE##*/}"
+  if [[ -e $DEVSLICE ]]; then  # repro_dev_slice.sh needs a new directory
+    if done_devslice; then mv "$DEVSLICE" "$DEVSLICE.superseded-$(date +%s)"; else mv "$DEVSLICE" "$DEVSLICE.failed-$(date +%s)"; fi
+  fi
+  in_env env -u STEPS OUT_BASE="$WORK/devslice" NSRR_SHHS_ROOT="$view" PYTHON=python "$REPO/scripts/repro_dev_slice.sh" "${DEVSLICE##*/}"
 }
 
 done_train10m() { [[ -s $RUN10M/summary.md && -s $RUN10M/benchmark.json ]]; }
