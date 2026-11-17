@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The A100 handoff run, in stages. After a failure, run the same command again: every stage whose
-# outputs already verify for this commit is skipped. A failure packs the evidence zip before it exits.
+# outputs already verify for this commit and the same settings (see stage_key) is skipped. A failure
+# packs the evidence zip before it exits.
 #
 #   scripts/a100_handoff.sh                       # every stage, in order
 #   scripts/a100_handoff.sh verify smoke          # only the named stages, still in the order below

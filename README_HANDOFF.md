@@ -107,6 +107,7 @@ If you already have the NSRR data in the same layout as the fetch (one folder pe
 Other settings:
 
 - `NGPU` (default 8): the GPUs that the preflight expects and that training uses. Use `CUDA_VISIBLE_DEVICES` to hide GPUs.
+- `N_EDF` (default 25): the MESA EDFs to fetch, and the SHHS-1 EDFs that the dev slice uses. The SHHS-1 fetch count is `N_SHHS_EDF`.
 - `N_SHHS_EDF` (default 0, which means all): the SHHS-1 EDFs to fetch. With `N_SHHS_EDF=25`, the fetch gets only the dev slice (about 7 GB), and the 10M run trains on 25 nights.
 - `FETCH_NEED_GB` (default 1000): the free disk that the NSRR fetch needs.
 - `SEIZEIT2=1`: also fetch SeizeIT2. See [The machine](#the-machine).
@@ -144,7 +145,7 @@ The evidence zip contains only text records from the run outputs in `WORK`:
 - `verify.txt`, `preflight/environment.json`, `preflight/disk.txt`, `preflight/nvidia-smi.txt`
 - `logs/run-settings.txt`: the settings of this run and the path of its 10M run folder. Older runs in `runs/` stay in the zip, but this file says which one is current
 - `smoke/run/` and `runs/<sha>-<settings hash>/kahlus-10m/`: `summary.md`, `log.jsonl`, `environment.json`, `benchmark.json`
-- `devslice/handoff-<sha>/`: `run.json`, `run_end.json`, `steps.tsv`, the study results, the discovery manifests and the logs
+- `devslice/handoff-<sha>/`: `run.json`, `run_end.json`, `steps.tsv`, the study results, the discovery manifests and the logs. A run that the script replaced stays beside it, as `handoff-<sha>.superseded-<time>` (it finished) or `handoff-<sha>.failed-<time>`
 - `logs/<stage>.log` for each stage
 - `MANIFEST.sha256`, with the SHA-256 of each file in the zip
 - `EXCLUDED.txt`, with each path that the zip does not contain and the reason
