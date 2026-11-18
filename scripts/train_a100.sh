@@ -82,8 +82,10 @@ export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}  # NGPU ranks and their loaders sha
 run python -m kahlus.run_env preflight --expect-gpus "$NGPU"
 
 # Each process takes the GPU that torchrun names in LOCAL_RANK. No GPU index is written anywhere.
+# torchrun runs as `python -m torch.distributed.run`, so its workers use this python even when torch
+# comes from the system site-packages of a venv (the torchrun script there names the system python).
 # shellcheck disable=SC2086  # TRAIN_DATASETS is a space-separated list on purpose
-run torchrun --standalone --nproc_per_node="$NGPU" -m kahlus.train \
+run python -m torch.distributed.run --standalone --nproc_per_node="$NGPU" -m kahlus.train \
   --shards "$SHARDS" --out "$RUN" --size "$SIZE" --train-datasets ${TRAIN_DATASETS:-shhs} \
   ${STEPS:+--steps "$STEPS"} --batch "$BATCH" --lr "$LR" --workers "${WORKERS:-6}" --amp bf16
 
