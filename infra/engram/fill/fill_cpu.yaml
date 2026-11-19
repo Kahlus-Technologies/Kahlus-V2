@@ -1,0 +1,20 @@
+# seizure-alarm CPU benchmark at full scale on Engram (no GPU). The workdir is a snapshot of the seizure-alarm branch
+# fm/seizure-crosssite (85cb3a2), made with `git archive`; this file and fill_cpu.sh ship from Kahlus-V2.
+#   mkdir -p /tmp/fm-engram-fill/sa && git -C <seizure-alarm clone> archive 85cb3a2 | tar -x -C /tmp/fm-engram-fill/sa
+#   sky launch -c fill-cpu --down -y infra/engram/fill/fill_cpu.yaml 2>&1 | tee fill-cpu.log
+# Sizing: 64 CPUs (five runs at 8 to 24 threads each), 256 GB RAM (14 h Siena recordings and the SeizeIT2 feature
+# matrices), no GPU. disk_size is the OS volume only: data (about 160 GB) and results go to /shared.
+name: fill-cpu
+
+resources:
+  infra: slurm/slinky
+  cpus: 64
+  memory: 256
+  disk_size: 50
+
+workdir: /tmp/fm-engram-fill/sa
+
+file_mounts:
+  ~/fill_cpu.sh: infra/engram/fill/fill_cpu.sh
+
+run: bash ~/fill_cpu.sh
