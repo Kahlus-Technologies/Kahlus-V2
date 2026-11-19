@@ -1,0 +1,28 @@
+# One worker on Engram: one GPU process per GPU, each running its share of jobs.json through kahlus.runner.
+# Do not run this by hand: launch.py checks `sky status` and the free GPUs, overrides the resources below,
+# ships src/ + jobs.json + provenance.json + setup_env.sh as the workdir (no clone on Engram), pulls the results and runs `sky down`.
+name: kahlus-worker
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:1
+  cpus: 8
+  memory: 32
+  disk_size: 20
+
+workdir: .  # replaced by launch.py with a staging folder
+
+run: |
+  set -uo pipefail
+  PY=$(bash setup_env.sh) || exit 1
+  export PYTHONPATH=$PWD/src
+  RUNS=${KAHLUS_ROOT:-/shared/$USER/kahlus}/runs
+  N=${SKYPILOT_NUM_GPUS_PER_NODE:-1}
+  pids=()
+  for g in $(seq 0 $((N-1))); do
+    CUDA_VISIBLE_DEVICES=$g "$PY" -m kahlus.runner --jobs jobs.json --provenance provenance.json --root "$RUNS" --rank "$g" --workers "$N" &
+    pids+=($!)
+  done
+  rc=0
+  for p in "${pids[@]}"; do wait "$p"; r=$?; [ "$r" -gt "$rc" ] && rc=$r; done
+  exit $rc
