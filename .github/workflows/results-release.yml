@@ -1,0 +1,47 @@
+name: results-release
+
+on:
+  push:
+    tags: ['results-*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          study="${tag#results-}"; study="${study%%-*}"
+          run="${tag#results-${study}-}"
+          dir="results/${study}/${run}"
+          for f in result.json summary.md; do
+            [ -f "$dir/$f" ] || { echo "missing $dir/$f"; exit 1; }
+          done
+          if find "$dir" -type f \( -name '*.edf' -o -name '*.pt' -o -name '*.ckpt' -o -name '*.npy' -o -name '*.npz' -o -name '*.parquet' -o -name '*.h5' \) | grep -q .; then
+            echo "data or checkpoint files in $dir"; exit 1
+          fi
+          base="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          issue="$(jq -r '.issue // empty' "$dir/result.json")"
+          prereg="prereg-${study}-v1"
+          {
+            echo "Results of study ${study^^}, run ${run}."
+            echo
+            [ -z "$issue" ] || echo "- Issue: $base/issues/$issue"
+            if git rev-parse -q --verify "refs/tags/$prereg" >/dev/null; then
+              echo "- Pre-registration: $base/releases/tag/$prereg ($base/tree/$prereg/docs/prereg)"
+            else
+              echo "- Pre-registration: none"
+            fi
+            echo "- Results folder: $base/tree/$tag/$dir"
+          } > notes.md
+          zip -r "$tag.zip" "$dir"
+          gh release create "$tag" "$tag.zip" --title "$tag" --notes-file notes.md --verify-tag
