@@ -11,7 +11,7 @@ exec 9>"$ROOT/ruby.lock"
 flock 9
 if [[ ! -f $ENV_DIR/.ready ]]; then
   {
-    [[ -x $ROOT/bin/micromamba ]] || curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C "$ROOT" bin/micromamba
+    [[ -x $ROOT/bin/micromamba ]] || { curl -fLs -o "$ROOT/bin/micromamba" https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64 && chmod +x "$ROOT/bin/micromamba"; }
     rm -rf "$ENV_DIR"
     MAMBA_ROOT_PREFIX=$ROOT/mamba "$ROOT/bin/micromamba" create -y -q -p "$ENV_DIR" -c conda-forge "ruby>=3.2"
     GEM_HOME=$ENV_DIR/gems "$ENV_DIR/bin/gem" install --no-document nsrr -v 8.0.0
