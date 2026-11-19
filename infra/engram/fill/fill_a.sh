@@ -64,7 +64,7 @@ if [[ ${SHHS2:-1} == 1 ]]; then (stage fetch_shhs2 fetch_shhs2) > "$FILL/logs/fe
 SHARDS=$FILL/shards/shhs1
 build_shards() {
   rm -rf "$SHARDS.partial"
-  NSRR_SHHS_ROOT=$NSRR/shhs/polysomnography "$PY" -m kahlus.shards nsrr --cohorts shhs --out "$SHARDS.partial" --jobs 48
+  NSRR_SHHS_ROOT=$NSRR/shhs/polysomnography "$PY" -m kahlus.shards nsrr --cohorts shhs --out "$SHARDS.partial" --jobs 24
   mv "$SHARDS.partial" "$SHARDS"
 }
 stage shards build_shards
@@ -85,7 +85,7 @@ sweep_point() {
   "$PY" -m kahlus.run_env preflight --expect-gpus "$NGPU" > "$FILL/logs/preflight.json"
   "$PY" -m torch.distributed.run --standalone --nproc_per_node="$NGPU" -m kahlus.train \
     --shards "$SHARDS" --out "$run" --size "$size" --train-datasets shhs \
-    ${!steps_var:+--steps "${!steps_var}"} --batch "${BATCH[$size]}" --lr "${LR[$size]}" --workers 6 --amp bf16 --ckpt-every "${CKPT[$size]}"
+    ${!steps_var:+--steps "${!steps_var}"} --batch "${BATCH[$size]}" --lr "${LR[$size]}" --workers 3 --amp bf16 --ckpt-every "${CKPT[$size]}"
   local ckpt; ckpt=$(find "$run" -name 'ckpt-*.pt' | sort | tail -n 1)
   "$PY" -m kahlus.forecast_bench --ckpt "$ckpt" --shards "$SHARDS" --device cuda --out "$run/benchmark.json"
   "$PY" -m kahlus.run_env summary "$run"
