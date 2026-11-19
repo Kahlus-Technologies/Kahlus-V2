@@ -21,9 +21,9 @@ file_mounts:
 run: |
   set -euo pipefail
   umask 077
-  ROOT=/shared/$USER/kahlus; NSRR=/shared/$USER/nsrr; OUT=/shared/$USER/k7_shhs1
+  ROOT=/shared/aayu/kahlus; NSRR=/shared/aayu/nsrr; OUT=/shared/aayu/k7_shhs1
   mkdir -p "$ROOT/bin" "$NSRR" "$OUT"
-  chmod 700 "/shared/$USER" "$NSRR" "$OUT"
+  chmod 700 /shared/aayu "$NSRR" "$OUT"
   REPO=$PWD
   RUBY=$(bash scripts/engram/setup_ruby.sh)
   VENV=$ROOT/venv-k7

@@ -4,7 +4,7 @@
 #
 #   RUBY=$(bash setup_ruby.sh)
 set -euo pipefail
-ROOT=${KAHLUS_ROOT:-/shared/$USER/kahlus}
+ROOT=${KAHLUS_ROOT:-/shared/aayu/kahlus}
 ENV_DIR=$ROOT/ruby-nsrr-8.0.0
 mkdir -p "$ROOT/bin"
 exec 9>"$ROOT/ruby.lock"
@@ -14,11 +14,12 @@ if [[ ! -f $ENV_DIR/.ready ]]; then
     [[ -x $ROOT/bin/micromamba ]] || { curl -fLs -o "$ROOT/bin/micromamba" https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64 && chmod +x "$ROOT/bin/micromamba"; }
     rm -rf "$ENV_DIR"
     MAMBA_ROOT_PREFIX=$ROOT/mamba "$ROOT/bin/micromamba" create -y -q -p "$ENV_DIR" -c conda-forge "ruby>=3.2"
-    GEM_HOME=$ENV_DIR/gems "$ENV_DIR/bin/gem" install --no-document nsrr -v 8.0.0
+    "$ENV_DIR/bin/gem" install --no-document --install-dir "$ENV_DIR/gems" nsrr -v 8.0.0
+    GEM_PATH="$ENV_DIR/gems" "$ENV_DIR/bin/ruby" -e 'require "nsrr"'  # fail here, not in the job, if the gem is not usable
     touch "$ENV_DIR/.ready"  # written last: a half-built env is never marked ready
   } >&2
 fi
 # A wrapper, so callers need no GEM_HOME of their own.
-printf '#!/usr/bin/env bash\nGEM_HOME=%q exec %q "$@"\n' "$ENV_DIR/gems" "$ENV_DIR/bin/ruby" > "$ENV_DIR/ruby-nsrr"
+printf '#!/usr/bin/env bash\nGEM_PATH=%q exec %q "$@"\n' "$ENV_DIR/gems" "$ENV_DIR/bin/ruby" > "$ENV_DIR/ruby-nsrr"
 chmod +x "$ENV_DIR/ruby-nsrr"
 echo "$ENV_DIR/ruby-nsrr"
