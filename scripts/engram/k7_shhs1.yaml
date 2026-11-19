@@ -1,0 +1,51 @@
+# K7 on every SHHS-1 night (minus dev nights 200001-200025), as one CPU-only Engram job. No GPU.
+#   NSRR_TOKEN=$(cat ~/.nsrr_token) K7_COMMIT=$(git rev-parse HEAD) \
+#     sky launch -c kahlus-k7 --down -y --secret NSRR_TOKEN --env K7_COMMIT scripts/engram/k7_shhs1.yaml
+# The token is a SkyPilot secret (redacted in logs), never written here. Resumable: the gem skips files that are
+# complete, and run_k7.py skips nights already cached under /shared. A rerun of the same command continues.
+# Sizing: 64 CPUs run 64 night workers (about 1.5 GB each at peak, so 128 GB RAM); the downloads are 10 parallel
+# streams; disk_size is for the OS volume only, the 230 GB of EDFs and the cache go to /shared (3.3 TB).
+name: kahlus-k7
+
+resources:
+  infra: slurm/slinky
+  cpus: 64
+  memory: 128
+  disk_size: 20
+
+workdir: .
+
+file_mounts:
+  ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem  # system CAs plus the Sectigo DV R36 intermediate
+
+run: |
+  set -euo pipefail
+  umask 077
+  ROOT=/shared/$USER/kahlus; NSRR=/shared/$USER/nsrr; OUT=/shared/$USER/k7_shhs1
+  mkdir -p "$ROOT/bin" "$NSRR" "$OUT"
+  chmod 700 "/shared/$USER" "$NSRR" "$OUT"
+  REPO=$PWD
+  RUBY=$(bash scripts/engram/setup_ruby.sh)
+  VENV=$ROOT/venv-k7
+  if [[ ! -f $VENV/.ready ]]; then
+    [[ -x $ROOT/bin/uv ]] || curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$ROOT/bin" UV_NO_MODIFY_PATH=1 sh
+    export UV_PYTHON_INSTALL_DIR=$ROOT/python UV_CACHE_DIR=$ROOT/uv-cache
+    rm -rf "$VENV"; "$ROOT/bin/uv" venv -q --python 3.12 "$VENV"
+    "$ROOT/bin/uv" pip install -q --python "$VENV/bin/python" numpy scipy "scikit-learn>=1.5,<1.9" "mne>=1.6,<2"
+    touch "$VENV/.ready"
+  fi
+  export SSL_CERT_FILE=$HOME/.nsrr-ca.pem
+  cd "$NSRR"
+  "$RUBY" "$REPO/scripts/nsrr_fetch.rb" shhs/polysomnography/annotations-events-nsrr/shhs1
+  pids=()
+  for d in 0 1 2 3 4 5 6 7 8 9; do  # ten streams, split by the last digit of the participant ID
+    "$RUBY" "$REPO/scripts/nsrr_fetch.rb" shhs/polysomnography/edfs/shhs1 "^shhs1-[0-9]{5}${d}\.edf\$" > "$OUT/fetch_$d.log" 2>&1 &
+    pids+=($!)
+  done
+  for p in "${pids[@]}"; do wait "$p"; done
+  du -sh "$NSRR"/shhs
+  cd "$REPO"
+  PYTHONPATH=src "$VENV/bin/python" scripts/run_k7.py --shhs "$NSRR/shhs/polysomnography" --exclude-dev-shhs \
+    --workers 64 --out "$OUT" > "$OUT/run_k7.log" 2>&1 || { tail -50 "$OUT/run_k7.log"; exit 1; }
+  echo K7_REPORT_BEGIN; cat "$OUT/report.json"; echo; echo K7_REPORT_END
+  echo K7_DONE
