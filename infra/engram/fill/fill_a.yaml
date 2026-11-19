@@ -1,0 +1,31 @@
+# Kahlus-V2 pretraining sweep on SHHS-1 (10M, 50M, 200M) on one Engram node: exploratory infrastructure, not a claim.
+#   sky status && sky gpus list --infra slurm/slinky     # look first; never take a GPU another person holds
+#   NSRR_TOKEN=$(cat ~/.nsrr_token) sky launch -c fill-a --down -y --secret NSRR_TOKEN \
+#     --env FILL_COMMIT=$(git rev-parse HEAD) infra/engram/fill/fill_a.yaml 2>&1 | tee fill-a.log
+#   infra/engram/fill/run_until_done.sh                   # the same, relaunched after a stop until FILL_A_DONE
+# The token is a SkyPilot secret (redacted in logs), never written here. Resumable: every stage writes a marker
+# on /shared/aayu/fill-a/state, the gem skips complete files, and the trainer resumes from the newest checkpoint.
+# Sizing: 8 GPUs (one node, torchrun, one rank per GPU; no memory cap, per the captain). 64 CPUs: 48 shard
+# builders at first (about 1.5 GB each), then 8 ranks x 6 loader workers. 256 GB RAM for both. disk_size is the
+# OS volume only: data, shards and checkpoints go to /shared (3.3 TB; SHHS-1 EDFs are about 230 GB).
+name: fill-a
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:8
+  cpus: 64
+  memory: 256
+  disk_size: 50
+
+workdir: .
+
+envs:
+  FILL_COMMIT: unknown
+
+secrets:
+  NSRR_TOKEN: null
+
+file_mounts:
+  ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem
+
+run: bash infra/engram/fill/fill_a.sh
