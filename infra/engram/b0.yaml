@@ -19,4 +19,4 @@ run: |
   OUT=${KAHLUS_ROOT:-/shared/$USER/kahlus}/runs/b0/$(date -u +%Y%m%dT%H%M%SZ)
   mkdir -p "$OUT"
   nvidia-smi --query-gpu=name,memory.total,power.limit,driver_version --format=csv
-  "$PY" b0_bench.py --out "$OUT" --parts "${B0_PARTS:-speed}" --seconds "${B0_SECONDS:-30}"
+  "$PY" b0_bench.py --out "$OUT" --seconds "${B0_SECONDS:-30}"

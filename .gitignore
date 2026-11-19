@@ -16,3 +16,6 @@ artifacts/*/cache/
 artifacts/nsrr_arousal_census/*_per_subject.jsonl
 *.edf
 *-nsrr.xml
+
+# Engram run logs hold the full remote output
+results/engram/*.log

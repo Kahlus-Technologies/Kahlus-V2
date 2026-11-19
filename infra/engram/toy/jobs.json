@@ -1,0 +1,1 @@
+[{"fn": "kahlus.runner:toy_train", "seed": 0, "steps": 400, "sleep": 0.5}, {"fn": "kahlus.runner:toy_train", "seed": 1, "steps": 400, "sleep": 0.5}, {"fn": "kahlus.runner:toy_train", "seed": 2, "steps": 400, "sleep": 0.5}]
