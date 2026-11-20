@@ -1,0 +1,17 @@
+# Pilots A and B, stage 1 on CPU only: anchors, window positions, alignment check and gate G1. No GPU is held.
+#   sky launch -c pilot-ab-anchors --down -i 1 -y infra/engram/fill/pilot_ab_anchors.yaml
+# 64 CPUs: 60 anchor workers (the 200 Pilot B nights also read their EDF for the amplitude); 128 GB RAM.
+name: pilot-ab-anchors
+
+resources:
+  infra: slurm/slinky
+  cpus: 64
+  memory: 128
+  disk_size: 50
+
+workdir: .
+
+envs:
+  STAGE: anchors
+
+run: bash infra/engram/fill/pilot_ab.sh

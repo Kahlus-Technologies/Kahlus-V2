@@ -328,6 +328,8 @@ def cmd_probe(a):
 def _fit_predict(Ftr, ytr, Fte, c=1.0):
     from sklearn.linear_model import LogisticRegression
 
+    if len(np.unique(ytr)) < 2:  # a one-class training set (only in tiny smoke data): predict that class
+        return np.full(len(Fte), ytr[0])
     mu, sd = Ftr.mean(0), Ftr.std(0) + 1e-6
     return LogisticRegression(C=c, max_iter=200).fit((Ftr - mu) / sd, ytr).predict((Fte - mu) / sd)
 
@@ -361,7 +363,7 @@ def _probe_b(F, bw):
 def cmd_probe_b(a):
     from joblib import Parallel, delayed
 
-    bw = np.load(Path(a.work) / "bwin.npz")
+    bw = dict(np.load(Path(a.work) / "bwin.npz"))  # a plain dict: an NpzFile cannot go to joblib workers
     sets = {}
     for f in sorted(Path(a.work).glob("emb-b-*.npy")) + sorted(Path(a.work).glob("bandpower-b-*.npy")):
         sets[f.stem] = np.load(f).astype(np.float32)
