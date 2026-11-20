@@ -52,6 +52,15 @@ def test_model_never_reads_later_seconds():
             assert torch.allclose(a[:, :5], b[:, :5], atol=1e-6) and not torch.allclose(a[:, 5:], b[:, 5:])
 
 
+def test_encode_is_the_last_second_and_ignores_what_comes_after():
+    torch.manual_seed(0)
+    model = KahlusPatchModel(ModelConfig(**SIZES["tiny"], patch_len=16, context=8, horizon=2))
+    x = torch.randn(2, 8, 2, 16)
+    with torch.no_grad():
+        assert model.encode(x[:, :5]).shape == (2, 2, SIZES["tiny"]["d_model"])
+        assert torch.allclose(model.encode(x[:, :5]), model.hidden(x)[:, 4], atol=1e-6)  # the window ends at second 4
+
+
 @pytest.mark.parametrize("name, target", [("10m", 10e6), ("50m", 50e6), ("200m", 200e6), ("1b", 1e9)])
 def test_size_presets_match_their_names(name, target):
     # Depth adds the same parameters per layer, so two shallow builds give the full count without the memory.
