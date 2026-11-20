@@ -182,3 +182,4 @@ def test_resume_report_compares_resumed_with_never_resumed_in_seed_spread_units(
     assert g["n_never_resumed"] == 2 and g["n_resumed"] == 2
     assert g["resumed_gap_over_spread"] == pytest.approx([0.5 / 2 ** 0.5, 3.0 / 2 ** 0.5])
     assert g["rerun_unbroken"] == [False, True]
+    json.dumps(g)  # the launcher prints it

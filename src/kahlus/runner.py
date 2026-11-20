@@ -118,7 +118,7 @@ def resume_report(results: list[dict], metric: str) -> dict:
     out = {}
     for key, rs in groups.items():
         fresh = np.array([r["result"][metric] for r in rs if r["starts"] == 1])
-        gaps = [abs(r["result"][metric] - fresh.mean()) for r in rs if r["starts"] > 1] if fresh.size else []
+        gaps = [float(abs(r["result"][metric] - fresh.mean())) for r in rs if r["starts"] > 1] if fresh.size else []
         spread = float(fresh.std(ddof=1)) if fresh.size > 1 else None
         ratio = [g / spread for g in gaps] if spread else None
         out[key] = {"n_never_resumed": int(fresh.size), "n_resumed": len(gaps), "seed_spread": spread,
