@@ -22,19 +22,29 @@ fetch() {  # fetch <path> [regex]: up to 5 attempts; the gem resumes by skipping
   done
   return 1
 }
-echo "== xml $(date -u +%FT%TZ)"
-fetch shhs/polysomnography/annotations-events-nsrr/shhs1 2>&1 | tail -n 15
-echo "== edf, 20 streams $(date -u +%FT%TZ)"
+E=$NSRR/shhs/polysomnography/edfs/shhs1 X=$NSRR/shhs/polysomnography/annotations-events-nsrr/shhs1
+progress() {  # one line every 2 minutes: files landed so far (the job holds every CPU, so sky exec cannot sample it)
+  while sleep 120; do
+    echo "PROGRESS $(date -u +%FT%TZ) xml=$(ls "$X" 2>/dev/null | grep -c xml) edf=$(ls "$E" 2>/dev/null | grep -c 'edf$') size=$(du -sh "$NSRR/shhs" 2>/dev/null | cut -f1)"
+  done
+}
+progress & prog=$!
+echo "== xml and edf, 20 streams each $(date -u +%FT%TZ)"
 pids=()
+for t in '[0-4]' '[5-9]'; do
+  for d in 0 1 2 3 4 5 6 7 8 9; do
+    fetch shhs/polysomnography/annotations-events-nsrr/shhs1 "^shhs1-[0-9]{4}${t}${d}-nsrr\\.xml\$" > "$LOGS/xml-$t$d.log" 2>&1 &
+    pids+=($!)
+  done
+done
 for t in '[0-4]' '[5-9]'; do   # 20 streams: tens digit half x units digit of the 6-digit ID
   for d in 0 1 2 3 4 5 6 7 8 9; do
     fetch shhs/polysomnography/edfs/shhs1 "^shhs1-[0-9]{4}${t}${d}\.edf\$" > "$LOGS/edf-$t$d.log" 2>&1 &
     pids+=($!)
   done
 done
-rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done
-((rc == 0)) || tail -n 3 "$LOGS"/edf-*.log
-E=$NSRR/shhs/polysomnography/edfs/shhs1 X=$NSRR/shhs/polysomnography/annotations-events-nsrr/shhs1
+rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done; kill "$prog" 2>/dev/null || true
+((rc == 0)) || tail -n 3 "$LOGS"/edf-*.log "$LOGS"/xml-*.log
 bad=0; for f in "$E"/*.edf; do [[ $(head -c 8 "$f") == "0       " ]] || { echo "bad EDF $f"; bad=$((bad + 1)); }; done
 echo "NSRR_MIRROR_COUNTS edf=$(ls "$E"/*.edf | wc -l) xml=$(ls "$X"/*.xml | wc -l) bad_edf=$bad stream_failures=$rc"
 du -sh "$NSRR/shhs"; stat -c '%a %n' "$NSRR"
