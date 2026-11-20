@@ -22,7 +22,7 @@ workdir: .
 envs:
   FILL_COMMIT: unknown
   NGPU: 4
-  SIZES: "10m 50m"
+  SIZES: "10m"
   REQUIRE_SHARDS: 0
 
 secrets:
