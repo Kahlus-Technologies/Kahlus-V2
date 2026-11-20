@@ -1,0 +1,22 @@
+# B0 speed test: windows per second for braindecode CNNs, DataLoader vs data in GPU memory vs packed processes.
+# Run from this folder (the workdir ships b0_bench.py and setup_env.sh). Check `sky status` and the free GPUs first, then:
+#   sky launch -c kahlus-b0 --down -y b0.yaml 2>&1 | tee b0.log; sky down -y kahlus-b0
+#   grep '^B0_RESULT ' b0.log
+name: kahlus-b0
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:1
+  cpus: 16      # the DataLoader case needs workers to be a fair baseline
+  memory: 64    # the 20 h float16 synthetic memmap is 3.3 GB; the page cache and 14 loader workers need the rest
+  disk_size: 20
+
+workdir: .
+
+run: |
+  set -euo pipefail
+  PY=$(bash setup_env.sh)
+  OUT=${KAHLUS_ROOT:-/shared/$USER/kahlus}/runs/b0/$(date -u +%Y%m%dT%H%M%SZ)
+  mkdir -p "$OUT"
+  nvidia-smi --query-gpu=name,memory.total,power.limit,driver_version --format=csv
+  "$PY" b0_bench.py --out "$OUT" --seconds "${B0_SECONDS:-30}"

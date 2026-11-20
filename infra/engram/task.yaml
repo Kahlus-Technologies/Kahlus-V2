@@ -1,0 +1,42 @@
+# JOBS_PER_GPU workers per GPU on Engram, all taking jobs from jobs.json through kahlus.runner.
+# Do not run this by hand: launch.py checks `sky status` and the free GPUs, overrides the resources below,
+# ships `git archive HEAD` (src/, infra/engram/) + jobs.json + provenance.json as the workdir (no clone on Engram), pulls the results and runs `sky down`.
+name: kahlus-worker
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:1
+  cpus: 8
+  memory: 32
+  disk_size: 20
+
+workdir: .  # replaced by launch.py with a staging folder
+
+envs:
+  CKPT_EVERY_S: "900"
+  JOBS_PER_GPU: "4"  # workers per GPU; the models use a few GB of 80, so several fit on one card
+
+run: |
+  set -uo pipefail
+  umask 077
+  PY=$(bash infra/engram/setup_env.sh) || exit 1
+  export PYTHONPATH=$PWD/src
+  RUNS=${KAHLUS_ROOT:-/shared/$USER/kahlus}/runs
+  N=${SKYPILOT_NUM_GPUS_PER_NODE:-1}
+  pids=()
+  # Every worker walks the whole list and claims a job with a file lock, so all GPUs stay busy to the end.
+  for g in $(seq 0 $((N-1))); do
+    for w in $(seq 1 "$JOBS_PER_GPU"); do
+      CUDA_VISIBLE_DEVICES=$g "$PY" -m kahlus.runner --jobs jobs.json --provenance provenance.json --root "$RUNS" \
+        --ckpt-every-s "$CKPT_EVERY_S" &
+      pids+=($!)
+    done
+  done
+  # A cancel or Slurm stop sends TERM to this shell: pass it on, so each worker saves and exits 75.
+  trap 'kill -TERM "${pids[@]}" 2>/dev/null' TERM INT
+  rc=0
+  for p in "${pids[@]}"; do
+    while :; do wait "$p"; r=$?; kill -0 "$p" 2>/dev/null || break; done
+    [ "$r" -gt "$rc" ] && rc=$r
+  done
+  exit $rc
