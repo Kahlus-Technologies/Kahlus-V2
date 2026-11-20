@@ -24,6 +24,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -38,7 +40,7 @@ from kahlus.heart_arousal import (
     fit_predict,
     half_night_shift,
 )
-from kahlus.nsrr import discover_nsrr, mesa_fit_allowed, nsrr_root
+from kahlus.nsrr import discover_nsrr, mesa_fit_allowed, nsrr_root, read_id_list
 from kahlus.nsrr_cache import NightCache
 from kahlus.rfs import cluster_bootstrap_rfs, rfs_bits
 
@@ -81,19 +83,34 @@ def per_night_z(x: np.ndarray) -> np.ndarray:
 NORMALIZERS = {"none": lambda x: x, "night": per_night_z, "causal": causal_z}
 
 
-def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str) -> dict:
+def _build(rec, name: str, arousal_lag_s: float):
+    """The night's features, or the error text when the recording cannot be used."""
+    try:
+        return build_recording(rec.edf_path, rec.xml_path, arousal_lag_s=arousal_lag_s, **COHORTS[name])
+    except ValueError as exc:
+        return str(exc)
+
+
+def load_cohort(name: str, root: Path, cache: Path, max_nights: int | None, normalize: str,
+                exclude: frozenset[str] = frozenset(), arousal_lag_s: float = 0.0, workers: int = 1) -> dict:
     recs, found = discover_nsrr(root, dataset=name)
-    recs = recs[:max_nights]
+    recs = [r for r in recs if r.subject_id not in exclude][:max_nights]
     store = NightCache.bind(cache, name, producer="run_heart_arousal_benchmark", report=found,
                             ids=[r.subject_id for r in recs])
     nights, skipped = [], []
+    todo = [r for r in recs if not store.has(r.subject_id)]
+    if workers > 1 and todo:  # night builds are independent; only this process writes the cache
+        with ProcessPoolExecutor(workers) as ex:
+            results = ex.map(partial(_build, name=name, arousal_lag_s=arousal_lag_s), todo, chunksize=2)
+            built = dict(zip([r.subject_id for r in todo], results))
+    else:
+        built = {}
     for rec in recs:
         if not store.has(rec.subject_id):
-            try:
-                r = build_recording(rec.edf_path, rec.xml_path, **COHORTS[name])
-            except ValueError as exc:
-                print(f"skip {name} {rec.subject_id}: {exc}", file=sys.stderr)
-                skipped.append(str(exc).split(" in /")[0])
+            r = built.get(rec.subject_id) or _build(rec, name, arousal_lag_s)
+            if isinstance(r, str):
+                print(f"skip {name} {rec.subject_id}: {r}", file=sys.stderr)
+                skipped.append(r.split(" in /")[0])
                 continue
             store.save(rec.subject_id, anchors=r["anchors"], labels=r["labels"], **{f"x_{k}": v for k, v in r["blocks"].items()})
         nights.append((rec.subject_id, store.load(rec.subject_id)))
@@ -176,13 +193,15 @@ def main() -> int:
     ap.add_argument("--normalize", choices=tuple(NORMALIZERS), default="none",
                     help="cardiac/EEG/PPG features: raw, z-scored over the whole night, or causal expanding z-score")
     ap.add_argument("--cache", type=Path, default=None, help="feature cache dir (default: OUT/cache). Raw features, tied to one data root, ID list and commit; a cache made by another run is refused")
+    ap.add_argument("--workers", type=int, default=1, help="processes that build uncached nights (the cache is written by this process only)")
+    ap.add_argument("--exclude-ids", type=Path, default=None, help="text file of subject IDs left out of every cohort before anchors are built (K1: the SHHS-1 dev nights)")
+    ap.add_argument("--arousal-lag-s", type=float, default=0.0, help="scorer-lag control: move every scored arousal onset this many seconds earlier")
     a = ap.parse_args()
     cache = a.cache or a.out / "cache"
-    data = {
-        "mesa": load_cohort("mesa", a.mesa, cache, a.max_nights, a.normalize),
-        "shhs": load_cohort("shhs", a.shhs, cache, a.max_nights, a.normalize),
-    }
-    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "bootstrap": a.bootstrap,
+    exclude = frozenset(read_id_list(a.exclude_ids)) if a.exclude_ids else frozenset()
+    data = {c: load_cohort(c, getattr(a, c), cache, a.max_nights, a.normalize, exclude, a.arousal_lag_s, a.workers) for c in ("mesa", "shhs")}
+    report = {"horizons_s": list(HORIZONS_S), "normalize": a.normalize, "bootstrap": a.bootstrap, "seed": a.seed,
+              "arousal_lag_s": a.arousal_lag_s, "excluded_ids": len(exclude),
               "nights": {k: v["n_nights"] for k, v in data.items()},
               "skipped": {k: v["skipped"] for k, v in data.items()},
               "discovery": {k: v["discovery"] for k, v in data.items()}, "results": {}}
