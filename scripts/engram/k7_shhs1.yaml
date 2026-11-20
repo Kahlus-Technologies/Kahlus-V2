@@ -1,6 +1,6 @@
 # K7 on every SHHS-1 night (minus dev nights 200001-200025), as one CPU-only Engram job. No GPU.
 #   K7_COMMIT=$(git rev-parse HEAD) \
-#     sky launch -c kahlus-k7 --down -y --env K7_COMMIT scripts/engram/k7_shhs1.yaml
+#     sky launch -c kahlus-k7 --down -i 1 -y --env K7_COMMIT scripts/engram/k7_shhs1.yaml
 # Resumable: run_k7.py skips nights already cached under /shared. A rerun of the same command continues.
 # Sizing: 32 CPUs run 32 night workers (about 1.5 GB each at peak, so 64 GB RAM). No download here: the data is read from
 # the shared NSRR mirror on /shared, so disk_size is for the OS volume only. Start it only when the mirror is complete.
