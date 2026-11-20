@@ -4,9 +4,9 @@ SkyPilot tasks for the Engram Slurm cluster (`infra: slurm/slinky`). Every task 
 
 | Task | Hardware | What it does |
 |---|---|---|
-| `fill_nsrr.yaml` | 16 CPUs, no GPU | The single NSRR mirror: SHHS-1 XMLs and EDFs into `/shared/aayu/nsrr`, 20 + 20 streams, retries, resume. Prints `PROGRESS` every 2 minutes and `NSRR_MIRROR_DONE` at the end |
-| `fill_shards.yaml` | 32 CPUs, no GPU | The SHHS-1 download check and the training shards (`kahlus.shards nsrr`) |
-| `fill_a.yaml` | 4 H100, 32 CPUs | Pretraining sweep 10M and 50M on SHHS-1 only (MESA stays sealed), torchrun, checkpoint every N steps, resume. 200M: `GPUS=8 SIZES=200m REQUIRE_SHARDS=1` for a short burst |
+| `fill_nsrr.yaml` | 4 CPUs, no GPU | The single NSRR mirror (`nsrr_mirror.py`): SHHS-1 XMLs and EDFs into `/shared/aayu/nsrr`, 8 streams (sleepdata.org allows about 10 requests at once), MD5-verified, resumable. Prints `PROGRESS` every 2 minutes and `NSRR_MIRROR_DONE` only after the full count |
+| `fill_shards.yaml` | 32 CPUs, no GPU | The mirror gate (refuses unless 5,793 EDFs and 5,793 XMLs and no `.part`), then the training shards (`kahlus.shards nsrr`) |
+| `fill_a.yaml` | 4 H100, 32 CPUs | Pretraining on SHHS-1 only (MESA stays sealed), torchrun, checkpoint every N steps, resume. Default size 10M; larger sizes wait for the captain's evidence gate (`SIZES=50m`, or `GPUS=8 SIZES=200m REQUIRE_SHARDS=1` for a short burst) |
 | `fill_cpu.yaml` | 64 CPUs, no GPU | The seizure-alarm CPU baseline at full scale, from a `git archive` snapshot of branch `fm/seizure-crosssite` (85cb3a2) |
 
 ## Run
