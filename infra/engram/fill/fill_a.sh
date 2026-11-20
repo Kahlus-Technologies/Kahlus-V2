@@ -52,9 +52,9 @@ fetch_cohort() {  # fetch_cohort <tree> <shhs1|shhs2> : annotations, then ten ED
   for p in "${pids[@]}"; do wait "$p" || { echo "fetch stream failed for $wave: see $FILL/logs/fetch-$wave-*.log" >&2; return 1; }; done
 }
 
-stage() {  # stage <name> <function>: skipped when state/<name>.ok exists for this commit
+stage() {  # stage <name> <function>: skipped when state/<name>.ok exists (the data and shard code do not change between launches)
   local n=$1
-  if [[ $(cat "$FILL/state/$n.ok" 2>/dev/null) == "$COMMIT" ]]; then log "skip $n"; return 0; fi
+  if [[ -f "$FILL/state/$n.ok" ]]; then log "skip $n"; return 0; fi
   log "start $n"; "$2"; echo "$COMMIT" > "$FILL/state/$n.ok"; log "done $n"
 }
 

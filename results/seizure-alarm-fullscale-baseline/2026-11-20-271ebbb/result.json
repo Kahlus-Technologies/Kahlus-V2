@@ -1,0 +1,200 @@
+{
+ "study": "seizure-alarm-fullscale-baseline",
+ "date": "2026-11-20",
+ "kind": "exploratory reproduction of the repo's CPU baseline at full scale, not a claim",
+ "provenance": {
+  "kahlus_v2_commit": "271ebbb91ef79643dbbd0159308b533d96bb497c",
+  "seizure_alarm_commit": "85cb3a2 (branch fm/seizure-crosssite, git archive snapshot)",
+  "command": "scripts/benchmark.py unchanged, default 6 folds x 3 seeds, method baseline (marginal_conformal), alphas 0.1/0.2/0.3",
+  "data_manifest": "PhysioNet SHA256SUMS verified by the repo's fetch scripts: CHB-MIT 237 recordings (default subset), Siena 41 recordings; SeizeIT2 OpenNeuro ds005873 via aws s3 sync",
+  "prereg_sha256": null,
+  "seeds": 3,
+  "gpu_hours": 0,
+  "compute": "Engram Slurm node, 64 CPUs, 256 GB, no GPU; five runs in parallel",
+  "run_seconds": {
+   "chbmit": 225.7,
+   "siena": 114.2,
+   "chbmit-to-siena": 176.3,
+   "seizeit2": 2163.9,
+   "chbmit-to-seizeit2": 933.8
+  },
+  "failure_note": "chbmit-to-seizeit2 failed on the first pass (two SeizeIT2 runs wrote one feature cache at once, EOFError) and was rerun alone; the other four runs are from the first pass"
+ },
+ "runs": {
+  "chbmit": {
+   "recordings": 182,
+   "hours": 269.1,
+   "seizures": 159,
+   "max_latency_s": 10.0,
+   "summary": [
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.1,
+     "pooled_sensitivity": 0.7966457023060798,
+     "patients_below_target": 0.1851851851851852,
+     "worst_patient_sensitivity": 0.36388888888888893,
+     "median_false_alarms_per_h": 50.99509055924457,
+     "worst_patient_false_alarms_per_h": 59.835437493488655
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.2,
+     "pooled_sensitivity": 0.7568134171907758,
+     "patients_below_target": 0.1851851851851852,
+     "worst_patient_sensitivity": 0.35555555555555557,
+     "median_false_alarms_per_h": 43.06315884025789,
+     "worst_patient_false_alarms_per_h": 59.56929129050781
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.3,
+     "pooled_sensitivity": 0.5849056603773585,
+     "patients_below_target": 0.3148148148148148,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 26.833945707161863,
+     "worst_patient_false_alarms_per_h": 52.74479237144206
+    }
+   ]
+  },
+  "siena": {
+   "recordings": 34,
+   "hours": 105.6,
+   "seizures": 40,
+   "max_latency_s": 10.0,
+   "summary": [
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.1,
+     "pooled_sensitivity": 0.9333333333333332,
+     "patients_below_target": 0.1818181818181818,
+     "worst_patient_sensitivity": 0.3333333333333333,
+     "median_false_alarms_per_h": 33.127236247018466,
+     "worst_patient_false_alarms_per_h": 58.24171266572494
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.2,
+     "pooled_sensitivity": 0.8916666666666666,
+     "patients_below_target": 0.1818181818181818,
+     "worst_patient_sensitivity": 0.27777777777777773,
+     "median_false_alarms_per_h": 23.789718676243762,
+     "worst_patient_false_alarms_per_h": 40.858565872525695
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.3,
+     "pooled_sensitivity": 0.8250000000000001,
+     "patients_below_target": 0.30303030303030304,
+     "worst_patient_sensitivity": 0.2222222222222222,
+     "median_false_alarms_per_h": 20.5210596317056,
+     "worst_patient_false_alarms_per_h": 36.800782279518025
+    }
+   ]
+  },
+  "chbmit-to-siena": {
+   "recordings": 34,
+   "hours": 105.6,
+   "seizures": 40,
+   "max_latency_s": 10.0,
+   "summary": [
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.1,
+     "pooled_sensitivity": 0.9416666666666668,
+     "patients_below_target": 0.15151515151515152,
+     "worst_patient_sensitivity": 0.6333333333333333,
+     "median_false_alarms_per_h": 36.58378211648962,
+     "worst_patient_false_alarms_per_h": 49.484552846382485
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.2,
+     "pooled_sensitivity": 0.7583333333333334,
+     "patients_below_target": 0.3636363636363636,
+     "worst_patient_sensitivity": 0.2333333333333333,
+     "median_false_alarms_per_h": 26.440905816467403,
+     "worst_patient_false_alarms_per_h": 37.448747152619596
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.3,
+     "pooled_sensitivity": 0.575,
+     "patients_below_target": 0.5151515151515151,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 11.848812282322369,
+     "worst_patient_false_alarms_per_h": 29.844397218404964
+    }
+   ]
+  },
+  "seizeit2": {
+   "recordings": 2216,
+   "hours": 9206.3,
+   "seizures": 755,
+   "max_latency_s": 10.0,
+   "summary": [
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.1,
+     "pooled_sensitivity": 0.8949227373068432,
+     "patients_below_target": 0.2414965986394558,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 44.36333771064221,
+     "worst_patient_false_alarms_per_h": 59.255891161782166
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.2,
+     "pooled_sensitivity": 0.7991169977924945,
+     "patients_below_target": 0.3299319727891156,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 32.657536748120286,
+     "worst_patient_false_alarms_per_h": 55.979278242500015
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.3,
+     "pooled_sensitivity": 0.7130242825607064,
+     "patients_below_target": 0.40816326530612246,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 25.34893172217401,
+     "worst_patient_false_alarms_per_h": 50.846714277266784
+    }
+   ]
+  },
+  "chbmit-to-seizeit2": {
+   "recordings": 620,
+   "hours": 5085.1,
+   "seizures": 479,
+   "max_latency_s": 10.0,
+   "summary": [
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.1,
+     "pooled_sensitivity": 0.9394572025052192,
+     "patients_below_target": 0.1130952380952381,
+     "worst_patient_sensitivity": 0.2222222222222222,
+     "median_false_alarms_per_h": 55.90252435640419,
+     "worst_patient_false_alarms_per_h": 60.00924397146442
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.2,
+     "pooled_sensitivity": 0.824634655532359,
+     "patients_below_target": 0.3333333333333333,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 43.351320421612854,
+     "worst_patient_false_alarms_per_h": 59.45861168961003
+    },
+    {
+     "method": "marginal_conformal",
+     "alpha": 0.3,
+     "pooled_sensitivity": 0.7557411273486431,
+     "patients_below_target": 0.35714285714285715,
+     "worst_patient_sensitivity": 0.0,
+     "median_false_alarms_per_h": 37.49678704858529,
+     "worst_patient_false_alarms_per_h": 58.34461098699387
+    }
+   ]
+  }
+ }
+}
