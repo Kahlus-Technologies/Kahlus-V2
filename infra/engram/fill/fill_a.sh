@@ -7,7 +7,8 @@
 # Runs inside the SkyPilot task fill_a.yaml. Everything it writes goes to $FILL on /shared. It prints the small
 # summary files between FILL_SUMMARY_BEGIN/END markers, so the launching server can keep them from the log.
 #
-# Settings (environment): SIZES (default "10m 50m 200m"), NGPU (8), SHHS2 (1: also download SHHS-2 EDFs),
+# Settings (environment): SIZES (default "10m 50m 200m"), NGPU (default 4, the captain's budget; 8 only for the 200M burst),
+# REQUIRE_SHARDS=1 (fail instead of downloading when /shared holds no shards: /shared may be per node), SHHS2 (1: also download SHHS-2 EDFs),
 # STEPS_<SIZE> (optimizer steps for one size, for example STEPS_200M; default: 4 passes over the data),
 # CKPT_EVERY_<SIZE> (steps between checkpoints, tuned so a checkpoint lands about every 15 minutes).
 set -euo pipefail
@@ -18,7 +19,7 @@ FILL=$ROOT/fill-a
 NSRR=$ROOT/nsrr            # SHHS-1 only: kahlus.nsrr rejects a subject that has two EDFs in one tree
 NSRR2=$ROOT/nsrr-shhs2     # SHHS-2 EDFs, a separate tree on purpose; no repo code reads it yet
 SIZES=${SIZES:-"10m 50m 200m"}
-NGPU=${NGPU:-8}
+NGPU=${NGPU:-4}
 COMMIT=${FILL_COMMIT:-unknown}
 mkdir -p "$FILL"/{logs,state,summaries,shards,runs} "$NSRR" "$NSRR2"
 umask 077
@@ -56,10 +57,11 @@ stage() {  # stage <name> <function>: skipped when state/<name>.ok exists for th
 
 fetch_shhs1() { fetch_cohort "$NSRR" shhs1; du -sh "$NSRR/shhs"; }
 fetch_shhs2() { fetch_cohort "$NSRR2" shhs2; du -sh "$NSRR2/shhs"; }
-stage fetch_shhs1 fetch_shhs1
+[[ ${REQUIRE_SHARDS:-0} != 1 || -s $FILL/shards/shhs1/index.json ]] || { echo "no shards on this node's /shared" >&2; exit 3; }
+if [[ ${REQUIRE_SHARDS:-0} != 1 ]]; then stage fetch_shhs1 fetch_shhs1; fi
 
 # SHHS-2 downloads in the background while the shards build: it needs network, the shards need CPUs.
-if [[ ${SHHS2:-1} == 1 ]]; then (stage fetch_shhs2 fetch_shhs2) > "$FILL/logs/fetch_shhs2.log" 2>&1 & shhs2_pid=$!; fi
+if [[ ${SHHS2:-1} == 1 && ${REQUIRE_SHARDS:-0} != 1 ]]; then (stage fetch_shhs2 fetch_shhs2) > "$FILL/logs/fetch_shhs2.log" 2>&1 & shhs2_pid=$!; fi
 
 SHARDS=$FILL/shards/shhs1
 build_shards() {
@@ -85,7 +87,7 @@ sweep_point() {
   "$PY" -m kahlus.run_env preflight --expect-gpus "$NGPU" > "$FILL/logs/preflight.json"
   "$PY" -m torch.distributed.run --standalone --nproc_per_node="$NGPU" -m kahlus.train \
     --shards "$SHARDS" --out "$run" --size "$size" --train-datasets shhs \
-    ${!steps_var:+--steps "${!steps_var}"} --batch "${BATCH[$size]}" --lr "${LR[$size]}" --workers 3 --amp bf16 --ckpt-every "${CKPT[$size]}"
+    ${!steps_var:+--steps "${!steps_var}"} --batch "${BATCH[$size]}" --lr "${LR[$size]}" --workers "${WORKERS:-6}" --amp bf16 --ckpt-every "${CKPT[$size]}"
   local ckpt; ckpt=$(find "$run" -name 'ckpt-*.pt' | sort | tail -n 1)
   "$PY" -m kahlus.forecast_bench --ckpt "$ckpt" --shards "$SHARDS" --device cuda --out "$run/benchmark.json"
   "$PY" -m kahlus.run_env summary "$run"
