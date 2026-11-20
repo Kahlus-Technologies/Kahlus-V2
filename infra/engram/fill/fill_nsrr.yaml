@@ -1,13 +1,12 @@
-# The single NSRR mirror (SHHS-1) on Engram, CPU only: no GPU is held while downloading.
+# The single NSRR mirror (SHHS-1) on Engram, CPU only. 8 streams: sleepdata.org allows about 10 requests at once
+# in total (429 above that), and each file costs about 4.7 s before its first byte. MD5-verified and resumable.
 #   NSRR_TOKEN=$(cat ~/.nsrr_token) sky launch -c fill-nsrr --down -y --secret NSRR_TOKEN infra/engram/fill/fill_nsrr.yaml
-# Sizing: the work is network-bound: 20 download streams (a Ruby process each, about 0.3 GB) need 16 CPUs and 32 GB.
-# disk_size is the OS volume only; the 230 GB of EDFs go to /shared.
 name: fill-nsrr
 
 resources:
   infra: slurm/slinky
-  cpus: 16
-  memory: 32
+  cpus: 4
+  memory: 8
   disk_size: 20
 
 workdir: .
@@ -18,4 +17,10 @@ secrets:
 file_mounts:
   ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem
 
-run: bash infra/engram/fill/fill_nsrr.sh
+run: |
+  set -euo pipefail
+  umask 077
+  mkdir -p /shared/aayu/nsrr && chmod 700 /shared/aayu /shared/aayu/nsrr
+  export SSL_CERT_FILE=$HOME/.nsrr-ca.pem
+  python3 -u infra/engram/fill/nsrr_mirror.py --root /shared/aayu/nsrr --dataset shhs \
+    --folder polysomnography/annotations-events-nsrr/shhs1 --folder polysomnography/edfs/shhs1 --conc 8
