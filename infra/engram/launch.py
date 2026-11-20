@@ -8,7 +8,8 @@ The job hash covers the config, the commit, the data manifest hash, the preproce
 preregistration hash, so a result from older code or data is not skipped as done. All three study files are
 required, and every result file repeats them.
 
-One worker process per GPU takes jobs from the list, so the whole grid runs in parallel. Results stay on /shared
+--jobs-per-gpu worker processes per GPU (default 4) take jobs from the list, so the whole grid runs in parallel.
+At most 4 GPUs; --burst allows up to 8. Results stay on /shared
 as the first copy and come back here as ``RESULT`` log lines with a digest. A line that is cut, mixed with another
 or changed fails its digest, and its job counts as missing. The launcher prints how many jobs of the list have a
 checked result before it prints anything else; rerun the same command and only the missing jobs are shipped.
@@ -71,16 +72,18 @@ def main() -> int:
     ap.add_argument("--data-manifest", required=True, type=Path, help="file listing the data used; its SHA-256 goes into the job hash")
     ap.add_argument("--preprocessing", required=True, type=Path, help="JSON file with the preprocessing settings; goes into the job hash")
     ap.add_argument("--prereg", required=True, type=Path, help="preregistration file; its SHA-256 goes into the job hash")
-    ap.add_argument("--gpus", type=int, default=1, help="H100s for this cluster, 8 at most (one node)")
-    ap.add_argument("--cpus", type=int, default=8)
+    ap.add_argument("--gpus", type=int, default=1, help="H100s for this cluster: 4 at most, 8 only with --burst (one node)")
+    ap.add_argument("--burst", action="store_true", help="allow 5 to 8 GPUs for a short job that needs them; then drop back")
+    ap.add_argument("--jobs-per-gpu", type=int, default=4, help="workers per GPU; measure jobs per hour at 1, 2, 4, 8")
+    ap.add_argument("--cpus", type=int, default=8, help="total; give each worker enough for its data loading")
     ap.add_argument("--memory", type=int, default=32, help="GB")
     ap.add_argument("--disk-size", type=int, default=20, help="GB")
     ap.add_argument("--ckpt-every-s", type=float, default=900.0)
     ap.add_argument("--resume-metric", help="result key; prints resumed-vs-never-resumed gaps in seed-spread units")
     ap.add_argument("--results", type=Path, default=REPO / "results/engram")
     a = ap.parse_args()
-    if not 1 <= a.gpus <= 8:
-        sys.exit("--gpus must be 1 to 8")
+    if not 1 <= a.gpus <= (8 if a.burst else 4):
+        sys.exit("--gpus must be 1 to 4 (5 to 8 only with --burst)")
     sys.path.insert(0, str(REPO / "src"))
     from kahlus.runner import atomic_write, intake, job_hash, resume_report  # these import no torch
 
@@ -106,7 +109,7 @@ def main() -> int:
             (Path(stage) / "provenance.json").write_text(json.dumps(prov))
             try:
                 sky("launch", "-c", a.name, "--down", "-y", "--workdir", stage, "--gpus", f"H100:{a.gpus}", "--cpus", str(a.cpus),
-                    "--memory", str(a.memory), "--disk-size", str(a.disk_size), "--env", f"CKPT_EVERY_S={a.ckpt_every_s}",
+                    "--memory", str(a.memory), "--disk-size", str(a.disk_size), "--env", f"CKPT_EVERY_S={a.ckpt_every_s}", "--env", f"JOBS_PER_GPU={a.jobs_per_gpu}",
                     str(Path(stage) / "infra/engram/task.yaml"), tee=log)
             finally:
                 sky("down", "-y", a.name, tee=log)  # also on failure or Ctrl-C
