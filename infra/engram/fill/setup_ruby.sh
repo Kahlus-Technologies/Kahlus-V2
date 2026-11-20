@@ -9,12 +9,14 @@ ENV_DIR=$ROOT/ruby-nsrr-8.0.0
 mkdir -p "$ROOT/bin"
 exec 9>"$ROOT/ruby.lock"
 flock 9
-if [[ ! -f $ENV_DIR/.ready ]]; then
+# .ready alone is not enough: with Ruby 4 the gem went to the per-cluster user dir, so check that require works.
+if ! GEM_HOME=$ENV_DIR/gems "$ENV_DIR/bin/ruby" -e 'require "nsrr"' 2>/dev/null; then
   {
     [[ -x $ROOT/bin/micromamba ]] || { curl -fLs -o "$ROOT/bin/micromamba" https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64 && chmod +x "$ROOT/bin/micromamba"; }
     rm -rf "$ENV_DIR"
     MAMBA_ROOT_PREFIX=$ROOT/mamba "$ROOT/bin/micromamba" create -y -q -p "$ENV_DIR" -c conda-forge "ruby>=3.2"
-    GEM_HOME=$ENV_DIR/gems "$ENV_DIR/bin/gem" install --no-document nsrr -v 8.0.0
+    "$ENV_DIR/bin/gem" install --no-document --install-dir "$ENV_DIR/gems" nsrr -v 8.0.0
+    GEM_HOME=$ENV_DIR/gems "$ENV_DIR/bin/ruby" -e 'require "nsrr"; puts "nsrr gem ok"'
     touch "$ENV_DIR/.ready"  # written last: a half-built env is never marked ready
   } >&2
 fi

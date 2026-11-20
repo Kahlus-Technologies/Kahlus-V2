@@ -23,7 +23,7 @@ fetch() {  # fetch <path> [regex]: up to 5 attempts; the gem resumes by skipping
   return 1
 }
 echo "== xml $(date -u +%FT%TZ)"
-fetch shhs/polysomnography/annotations-events-nsrr/shhs1 > "$LOGS/xml.log" 2>&1
+fetch shhs/polysomnography/annotations-events-nsrr/shhs1 2>&1 | tail -n 15
 echo "== edf, 20 streams $(date -u +%FT%TZ)"
 pids=()
 for t in '[0-4]' '[5-9]'; do   # 20 streams: tens digit half x units digit of the 6-digit ID
@@ -33,6 +33,7 @@ for t in '[0-4]' '[5-9]'; do   # 20 streams: tens digit half x units digit of th
   done
 done
 rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done
+((rc == 0)) || tail -n 3 "$LOGS"/edf-*.log
 E=$NSRR/shhs/polysomnography/edfs/shhs1 X=$NSRR/shhs/polysomnography/annotations-events-nsrr/shhs1
 bad=0; for f in "$E"/*.edf; do [[ $(head -c 8 "$f") == "0       " ]] || { echo "bad EDF $f"; bad=$((bad + 1)); }; done
 echo "NSRR_MIRROR_COUNTS edf=$(ls "$E"/*.edf | wc -l) xml=$(ls "$X"/*.xml | wc -l) bad_edf=$bad stream_failures=$rc"
