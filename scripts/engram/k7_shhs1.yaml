@@ -36,10 +36,14 @@ run: |
   fi
   export SSL_CERT_FILE=$HOME/.nsrr-ca.pem
   cd "$NSRR"
-  "$RUBY" "$REPO/scripts/nsrr_fetch.rb" shhs/polysomnography/annotations-events-nsrr/shhs1
+  # Ten streams per kind, split by the last digit of the participant ID. One sequential stream moved about 1 file
+  # per 9 s from Engram (2,100 XMLs in 5 h, with connection timeouts), so the fetch is the bottleneck, not the analysis.
+  fetch() { for try in 1 2 3; do "$RUBY" "$REPO/scripts/nsrr_fetch.rb" "$@" && return 0; done; return 1; }
   pids=()
-  for d in 0 1 2 3 4 5 6 7 8 9; do  # ten streams, split by the last digit of the participant ID
-    "$RUBY" "$REPO/scripts/nsrr_fetch.rb" shhs/polysomnography/edfs/shhs1 "^shhs1-[0-9]{5}${d}\.edf\$" > "$OUT/fetch_$d.log" 2>&1 &
+  for d in 0 1 2 3 4 5 6 7 8 9; do
+    fetch shhs/polysomnography/annotations-events-nsrr/shhs1 "^shhs1-[0-9]{5}${d}-nsrr\.xml\$" > "$OUT/fetch_xml_$d.log" 2>&1 &
+    pids+=($!)
+    fetch shhs/polysomnography/edfs/shhs1 "^shhs1-[0-9]{5}${d}\.edf\$" > "$OUT/fetch_$d.log" 2>&1 &
     pids+=($!)
   done
   for p in "${pids[@]}"; do wait "$p"; done
