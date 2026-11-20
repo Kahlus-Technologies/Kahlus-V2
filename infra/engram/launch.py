@@ -108,7 +108,7 @@ def main() -> int:
             (Path(stage) / "jobs.json").write_text(json.dumps(todo))  # only the missing jobs, so no GPU waits for a done one
             (Path(stage) / "provenance.json").write_text(json.dumps(prov))
             try:
-                sky("launch", "-c", a.name, "--down", "-y", "--workdir", stage, "--gpus", f"H100:{a.gpus}", "--cpus", str(a.cpus),
+                sky("launch", "-c", a.name, "--down", "-i", "1", "-y", "--workdir", stage, "--gpus", f"H100:{a.gpus}", "--cpus", str(a.cpus),
                     "--memory", str(a.memory), "--disk-size", str(a.disk_size), "--env", f"CKPT_EVERY_S={a.ckpt_every_s}", "--env", f"JOBS_PER_GPU={a.jobs_per_gpu}",
                     str(Path(stage) / "infra/engram/task.yaml"), tee=log)
             finally:

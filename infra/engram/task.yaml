@@ -1,6 +1,6 @@
 # JOBS_PER_GPU workers per GPU on Engram, all taking jobs from jobs.json through kahlus.runner.
 # Do not run this by hand: launch.py checks `sky status` and the free GPUs, overrides the resources below,
-# ships src/ + jobs.json + provenance.json + setup_env.sh as the workdir (no clone on Engram), pulls the results and runs `sky down`.
+# ships `git archive HEAD` (src/, infra/engram/) + jobs.json + provenance.json as the workdir (no clone on Engram), pulls the results and runs `sky down`.
 name: kahlus-worker
 
 resources:
@@ -19,7 +19,7 @@ envs:
 run: |
   set -uo pipefail
   umask 077
-  PY=$(bash setup_env.sh) || exit 1
+  PY=$(bash infra/engram/setup_env.sh) || exit 1
   export PYTHONPATH=$PWD/src
   RUNS=${KAHLUS_ROOT:-/shared/$USER/kahlus}/runs
   N=${SKYPILOT_NUM_GPUS_PER_NODE:-1}
