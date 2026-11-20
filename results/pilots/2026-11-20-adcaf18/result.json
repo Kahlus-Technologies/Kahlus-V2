@@ -1,0 +1,74 @@
+{
+ "study": "pilots-a-b",
+ "kind": "exploratory pilot on partial SHHS-1 data, not a claim",
+ "provenance": {
+  "kahlus_v2_commit": "adcaf186e9265bc1467420ab897337dc19c5f975",
+  "prereg": {
+   "docs/prereg/pilot_a.md": "77a1c598effea755e520003dcd68b8ff24964af6d8114c42d9d59211ac142abb",
+   "docs/prereg/pilot_b.md": "2ca52b7a601b4bf1c61e21ed42fecffe5fd089d6b4a25f7f56241c6e47eb6b59",
+   "docs/prereg/pilot_ab_implementation_notes.md": "c551dc730ea9e987832ef27ffaf1f326275a42123df1320fb0be3511510aebe8"
+  },
+  "data": "SHHS-1 shards from the partial mirror: 1883 usable nights (index of 1902 less 19 dev nights), 1356 fit / 337 tune / 190 test subjects; shard index hash not recorded; no NSRR data in git",
+  "encoder": "/shared/aayu/fill-a/runs/kahlus-10m/ckpt-00003139.pt (3,139 steps, about 8 minutes on 4 GPUs, trained on the same partial shards)",
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "compute": "Engram H100x4 (cluster pilot-ab, 64 CPUs), 16:47Z to about 17:24Z, about 2.6 GPU-hours; anchors on a CPU-only cluster (1 minute)",
+  "logs": "data/engram-fill/pilot-ab.clean.log (not in git)"
+ },
+ "gates": {
+  "G1": {
+   "test_subjects_with_30s_label": 190,
+   "test_positives_30s": 25100,
+   "anchors": 3468613,
+   "alignment_ratio_after_over_before_arousal": 4.714
+  },
+  "shift_control_30s_bits": [
+   -0.0002,
+   -0.0005,
+   0.0001
+  ]
+ },
+ "pilot_a": {
+  "verdict": "no clear gain",
+  "primary_bits_pretrained_minus_scratch_30s": [
+   0.0,
+   -0.0003,
+   0.0004
+  ],
+  "bits_over_prior_only_30s": {
+   "pretrained": [
+    0.0014,
+    0.0004,
+    0.0025
+   ],
+   "random": [
+    0.0013,
+    0.0003,
+    0.0024
+   ]
+  }
+ },
+ "pilot_b": {
+  "subject_id_acc": {
+   "pretrained_asis": 0.2439,
+   "random_asis_mean": 0.07,
+   "bandpower_asis": 0.0575,
+   "chance": 0.005
+  },
+  "stage_balanced_acc": {
+   "pretrained_asis": 0.4969,
+   "random_asis_mean": 0.4139,
+   "bandpower_asis": 0.5284
+  },
+  "amplitude_acc": {
+   "pretrained_asis": 0.432,
+   "pretrained_perwindow": 0.4035
+  },
+  "fingerprint_finding": false,
+  "amplitude_finding": false,
+  "subjects": 190
+ }
+}

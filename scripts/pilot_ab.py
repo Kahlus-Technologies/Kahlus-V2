@@ -15,18 +15,16 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import math
 import re
 import sys
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
 from kahlus import heart_arousal as ha
 from kahlus.forecast_bench import is_tuning
-from kahlus.nsrr import event_kind, parse_nsrr_events, stage_at, sleep_stage_epochs
+from kahlus.nsrr import event_kind, parse_nsrr_events, sleep_stage_epochs, stage_at
 from kahlus.shards import FS_HZ, WARMUP_PATCHES, ShardSet, is_heldout
 
 CTX = 64  # seconds in a window
@@ -478,7 +476,6 @@ def report_b(work: Path, rng) -> list[str]:
     if not f.exists():
         return ["Pilot B probes missing."]
     pb = np.load(f, allow_pickle=True).item()
-    chance = {"id": 1 / 200, "amp": 0.2}
     rows = ["| Feature set | Subject-ID acc (chance 0.005) | Amplitude acc (chance 0.2) | Stage balanced acc (chance 0.2) |", "|---|---|---|---|"]
     for k, r in pb.items():
         rows.append(f"| {k} | {r['id_acc'].mean():.4f} | {r['amp_acc']:.4f} | {r['stage_ba']:.4f} |")
