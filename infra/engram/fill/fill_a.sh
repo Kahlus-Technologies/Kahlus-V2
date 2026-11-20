@@ -8,6 +8,7 @@
 # summary files between FILL_SUMMARY_BEGIN/END markers, so the launching server can keep them from the log.
 #
 # Settings (environment): SIZES (default "10m 50m 200m"), NGPU (default 4, the captain's budget; 8 only for the 200M burst),
+# SHARDS_ONLY=1 (CPU-only job: download check and shards, no GPU held; fill_shards.yaml),
 # REQUIRE_SHARDS=1 (fail instead of downloading when /shared holds no shards: /shared may be per node), SHHS2 (default 0; 1 also downloads SHHS-2 EDFs),
 # STEPS_<SIZE> (optimizer steps for one size, for example STEPS_200M; default: 4 passes over the data),
 # CKPT_EVERY_<SIZE> (steps between checkpoints, tuned so a checkpoint lands about every 15 minutes).
@@ -26,8 +27,10 @@ umask 077
 chmod 700 "$ROOT" "$NSRR" "$NSRR2" 2>/dev/null || true
 log() { printf '== %s %s\n' "$*" "$(date -u +%FT%TZ)"; }
 
-log "nvidia-smi"; nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv
-[[ $(nvidia-smi --list-gpus | wc -l) -ge $NGPU ]] || { echo "fewer than $NGPU GPUs visible" >&2; exit 2; }
+if [[ ${SHARDS_ONLY:-0} != 1 ]]; then
+  log "nvidia-smi"; nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv
+  [[ $(nvidia-smi --list-gpus | wc -l) -ge $NGPU ]] || { echo "fewer than $NGPU GPUs visible" >&2; exit 2; }
+fi
 
 # ---- environment (CUDA torch into /shared/aayu/venv, once) ----
 PY=$(bash "$REPO/infra/engram/fill/setup_env.sh")
@@ -75,6 +78,8 @@ import json, sys
 i = json.load(open(sys.argv[1]))
 print("shards:", len(i["nights"]), "nights,", sum(n["n"] for n in i["nights"]), "patches,", sorted({n["dataset"] for n in i["nights"]}))
 PYEOF
+
+[[ ${SHARDS_ONLY:-0} != 1 ]] || { echo FILL_SHARDS_DONE; exit 0; }  # the CPU-only data-prep job stops here
 
 # ---- the sweep ----
 declare -A BATCH=([10m]=256 [50m]=128 [200m]=64) LR=([10m]=6e-4 [50m]=4e-4 [200m]=2e-4)  # scripts/train_a100.sh values

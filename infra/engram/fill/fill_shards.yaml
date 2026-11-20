@@ -1,0 +1,27 @@
+# CPU-only data prep for the pretraining sweep: the SHHS-1 download check and the training shards (no GPU held).
+# The token is a SkyPilot secret (redacted in logs), never written here. Resumable: every stage writes a marker
+# on /shared/aayu/fill-a/state, the gem skips complete files, and the trainer resumes from the newest checkpoint.
+# Sizing: 4 GPUs (the captain's budget; `--gpus H100:8` and NGPU=8 for the 200M burst only), torchrun, one rank per GPU. 32 CPUs, so that it fits beside the 64-CPU
+# jobs on the node: 24 shard builders at first (about 1.5 GB each), then 4 ranks x 6 loader workers. 192 GB RAM. disk_size is the OS
+# volume only: data, shards and checkpoints go to /shared (3.3 TB; SHHS-1 EDFs are about 230 GB).
+name: fill-shards
+
+resources:
+  infra: slurm/slinky
+  cpus: 32
+  memory: 192
+  disk_size: 50
+
+workdir: .
+
+envs:
+  FILL_COMMIT: unknown
+  SHARDS_ONLY: 1
+
+secrets:
+  NSRR_TOKEN: null
+
+file_mounts:
+  ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem
+
+run: bash infra/engram/fill/fill_a.sh
