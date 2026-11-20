@@ -8,7 +8,7 @@
 # summary files between FILL_SUMMARY_BEGIN/END markers, so the launching server can keep them from the log.
 #
 # Settings (environment): SIZES (default "10m 50m 200m"), NGPU (default 4, the captain's budget; 8 only for the 200M burst),
-# REQUIRE_SHARDS=1 (fail instead of downloading when /shared holds no shards: /shared may be per node), SHHS2 (1: also download SHHS-2 EDFs),
+# REQUIRE_SHARDS=1 (fail instead of downloading when /shared holds no shards: /shared may be per node), SHHS2 (default 0; 1 also downloads SHHS-2 EDFs),
 # STEPS_<SIZE> (optimizer steps for one size, for example STEPS_200M; default: 4 passes over the data),
 # CKPT_EVERY_<SIZE> (steps between checkpoints, tuned so a checkpoint lands about every 15 minutes).
 set -euo pipefail
@@ -61,7 +61,7 @@ fetch_shhs2() { fetch_cohort "$NSRR2" shhs2; du -sh "$NSRR2/shhs"; }
 if [[ ${REQUIRE_SHARDS:-0} != 1 ]]; then stage fetch_shhs1 fetch_shhs1; fi
 
 # SHHS-2 downloads in the background while the shards build: it needs network, the shards need CPUs.
-if [[ ${SHHS2:-1} == 1 && ${REQUIRE_SHARDS:-0} != 1 ]]; then (stage fetch_shhs2 fetch_shhs2) > "$FILL/logs/fetch_shhs2.log" 2>&1 & shhs2_pid=$!; fi
+if [[ ${SHHS2:-0} == 1 && ${REQUIRE_SHARDS:-0} != 1 ]]; then (stage fetch_shhs2 fetch_shhs2) > "$FILL/logs/fetch_shhs2.log" 2>&1 & shhs2_pid=$!; fi
 
 SHARDS=$FILL/shards/shhs1
 build_shards() {

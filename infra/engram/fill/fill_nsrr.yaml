@@ -1,0 +1,21 @@
+# The single NSRR mirror (SHHS-1) on Engram, CPU only: no GPU is held while downloading.
+#   NSRR_TOKEN=$(cat ~/.nsrr_token) sky launch -c fill-nsrr --down -y --secret NSRR_TOKEN infra/engram/fill/fill_nsrr.yaml
+# Sizing: the work is network-bound: 20 download streams (a Ruby process each, about 0.3 GB) need 16 CPUs and 32 GB.
+# disk_size is the OS volume only; the 230 GB of EDFs go to /shared.
+name: fill-nsrr
+
+resources:
+  infra: slurm/slinky
+  cpus: 16
+  memory: 32
+  disk_size: 20
+
+workdir: .
+
+secrets:
+  NSRR_TOKEN: null
+
+file_mounts:
+  ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem
+
+run: bash infra/engram/fill/fill_nsrr.sh
