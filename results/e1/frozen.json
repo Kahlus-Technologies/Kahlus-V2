@@ -1,0 +1,52 @@
+{
+ "signal": {
+  "mask": 0.3,
+  "lr": {
+   "10m": 0.0003,
+   "50m": 0.0003,
+   "200m": 0.0003
+  },
+  "tune_loss_10m": 0.2523216507175146,
+  "random_tune_loss_10m": 0.36202997102363527,
+  "collapsed_runs": [],
+  "pilot_runs": 6,
+  "sec_per_step": {
+   "10m": 0.07286458333333333,
+   "50m": 0.19958333333333333,
+   "200m": 0.5627083333333334
+  }
+ },
+ "latent": {
+  "mask": 0.6,
+  "lr": {
+   "10m": 0.001,
+   "50m": 0.001,
+   "200m": 0.0003
+  },
+  "tune_loss_10m": 0.2500437436720894,
+  "random_tune_loss_10m": 0.36202997102363527,
+  "collapsed_runs": [],
+  "pilot_runs": 6,
+  "sec_per_step": {
+   "10m": 0.10597222222222222,
+   "50m": 0.28833333333333333,
+   "200m": 0.7872222222222223
+  }
+ },
+ "latent_failed": false,
+ "arms": [
+  "signal",
+  "latent"
+ ],
+ "projected_gpu_hours": 148.7,
+ "k3_cuts": [],
+ "seeds_200m": 3,
+ "cells_200m": [
+  "r1",
+  "r4",
+  "r16",
+  "clean4",
+  "dirty4"
+ ],
+ "k3_over_cap_after_cuts": false
+}
