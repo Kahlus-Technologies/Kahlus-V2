@@ -1,0 +1,26 @@
+# The MESA mirror on Engram, CPU only. MESA is the sealed test cohort: mirrored here, never pretrained on, never put in shards. 8 streams: sleepdata.org allows about 10 requests at once
+# in total (429 above that), and each file costs about 4.7 s before its first byte. MD5-verified and resumable.
+#   NSRR_TOKEN=$(cat ~/.nsrr_token) sky launch -c fill-mesa --down -y --secret NSRR_TOKEN infra/engram/fill/fill_mesa.yaml
+name: fill-mesa
+
+resources:
+  infra: slurm/slinky
+  cpus: 4
+  memory: 8
+  disk_size: 20
+
+workdir: .
+
+secrets:
+  NSRR_TOKEN: null
+
+file_mounts:
+  ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem
+
+run: |
+  set -euo pipefail
+  umask 077
+  mkdir -p /shared/aayu/nsrr/mesa && chmod 700 /shared/aayu /shared/aayu/nsrr /shared/aayu/nsrr/mesa
+  export SSL_CERT_FILE=$HOME/.nsrr-ca.pem
+  python3 -u infra/engram/fill/nsrr_mirror.py --root /shared/aayu/nsrr --dataset mesa \
+    --folder polysomnography/annotations-events-nsrr --folder polysomnography/edfs --conc 8
