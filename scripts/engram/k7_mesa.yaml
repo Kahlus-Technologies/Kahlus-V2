@@ -22,6 +22,13 @@ run: |
   umask 077
   ROOT=/shared/aayu/kahlus; NSRR=/shared/aayu/nsrr; C=${K7_COMMIT:-unknown}
   VENV=$ROOT/venv-k7
+  # The node has no git and the seal shells out to it: take one from conda-forge into /shared, once.
+  if [[ ! -x $ROOT/git-env/bin/git ]]; then
+    [[ -x $ROOT/bin/micromamba ]] || { mkdir -p "$ROOT/bin"; curl -fLs -o "$ROOT/bin/micromamba" https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64 && chmod +x "$ROOT/bin/micromamba"; }
+    MAMBA_ROOT_PREFIX=$ROOT/mamba "$ROOT/bin/micromamba" create -y -q -p "$ROOT/git-env" -c conda-forge git
+  fi
+  export PATH=$ROOT/git-env/bin:$PATH
+  git config --global --add safe.directory '*'
   [[ -f $VENV/.ready ]] || { echo "no venv at $VENV"; exit 2; }
   M=$NSRR/mesa/polysomnography
   ne=$(ls "$M/edfs" 2>/dev/null | grep -c '\.edf$' || true); nx=$(ls "$M/annotations-events-nsrr" 2>/dev/null | grep -c -- '-nsrr\.xml$' || true)
