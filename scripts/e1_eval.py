@@ -148,13 +148,30 @@ def stage_losses(F, y, split, subj, n_subj):
     return out
 
 
+def tune_scores(F, an):
+    """Mean log loss on the tune subjects of a probe fitted on the fit subjects (C = 0.1): the number that picks a pilot's settings."""
+    from sklearn.linear_model import LogisticRegression
+
+    rng = np.random.default_rng(0)
+    out = {}
+    for key, y in (("tune_detect", an["detect"].astype(np.int64)), ("tune_stage", an["stage"].astype(np.int64))):
+        ok = y >= 0
+        fit = rng.permutation(np.flatnonzero(ok & (an["split"] == 0)))[:50_000]
+        tune = rng.permutation(np.flatnonzero(ok & (an["split"] == 1)))[:50_000]
+        mu, sd = F[fit].mean(0), F[fit].std(0) + 1e-6
+        m = LogisticRegression(C=0.1, max_iter=300).fit((F[fit] - mu) / sd, y[fit])
+        p = m.predict_proba((F[tune] - mu) / sd)[np.arange(len(tune)), np.searchsorted(m.classes_, y[tune])]
+        out[key] = float(-np.log(np.clip(p, 1e-6, 1)).mean())
+    return out
+
+
 def cmd_probe(a):
     an = np.load(Path(a.work) / "anchors.npz")
     n = len(an["subjects"])
     F = np.load(a.emb).astype(np.float32)
     det = pa._lr_loss(F, an["detect"], an["split"], an["subj"], n)
     stage = stage_losses(F, an["stage"].astype(np.int64), an["split"], an["subj"], n)
-    np.savez(a.out, detect=det, stage=stage)
+    np.savez(a.out, detect=det, stage=stage, **tune_scores(F, an))
     print("probed", a.out, "detect", float(np.nanmean(det)), "stage", float(np.nanmean(stage)), flush=True)
 
 
@@ -215,20 +232,23 @@ RUNS = "{arm}-{size}-{cell}-s{seed}"
 ARMS, SIZES, SEEDS = ("signal", "latent"), ("10m", "50m", "200m"), (0, 1, 2)
 
 
-def planned(rung2_cells=None):
-    """The grid: 5 data cells x 3 sizes x 2 arms x 3 seeds, minus whatever K2 and K3 cut (a dict size -> cells for 200m)."""
+def planned(rung2_cells=None, seeds_200m=3, arms=ARMS):
+    """The grid: 5 data cells x 3 sizes x 2 arms x 3 seeds, minus what K1 (a failed latent arm), K2 and K3 cut at 200m."""
     cells = ("r1", "r4", "r16", "clean4", "dirty4")
     out = []
     for size in SIZES:
         cs = cells if size != "200m" or rung2_cells is None else rung2_cells
-        out += [RUNS.format(arm=a, size=size, cell=c, seed=s) for a in ARMS for c in cs for s in SEEDS]
+        seeds = SEEDS if size != "200m" else SEEDS[:seeds_200m]
+        out += [RUNS.format(arm=a, size=size, cell=c, seed=s) for a in arms for c in cs for s in seeds]
     return out
 
 
 def cmd_report(a):
     work = Path(a.work)
     cuts = a.cells_200m.split(",") if a.cells_200m else None
-    missing = [r for r in planned(cuts) if not (work / "runs" / r / "probe.npz").exists()]
+    frozen = json.loads((work / "frozen.json").read_text()) if (work / "frozen.json").exists() else {}
+    arms = tuple(frozen.get("arms", ARMS))
+    missing = [r for r in planned(cuts, a.seeds_200m, arms) if not (work / "runs" / r / "probe.npz").exists()]
     if missing:
         raise SystemExit(f"refusing to report: {len(missing)} planned runs have no probe.npz, first {missing[:3]}")
     an = np.load(work / "anchors.npz")
@@ -259,6 +279,10 @@ def cmd_report(a):
             for cell in ("r1", "r4", "r16", "clean4", "dirty4"):
                 if (work / "runs" / RUNS.format(arm=arm, size=size, cell=cell, seed=0) / "probe.npz").exists():
                     lines.append(f"| {arm} | {size} | {cell} | {np.nanmean(loss(arm, size, cell, readout)[test_subj]) / LN2:.4f} |")
+    if "latent" not in arms:  # K1: the latent arm failed at 10M, so there is no contrast to test
+        (work / "report.md").write_text("\n".join(lines) + "\n\nThe latent arm collapsed at 10M (K1): the grid ran the signal arm only and there is no D.\n")
+        print("\n".join(lines))
+        return
     d = slope("latent", "r1", readout) - slope("signal", "r1", readout)
     m, lo, hi, _, k = pa.boot(d[test_subj], rng)
     per_seed = [float(np.nanmean((slope("latent", "r1", readout, (s,)) - slope("signal", "r1", readout, (s,)))[test_subj])) for s in SEEDS]
@@ -301,6 +325,7 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--emb")
     ap.add_argument("--cells-200m", help="comma list of 200m cells K2 or K3 left in the plan")
+    ap.add_argument("--seeds-200m", type=int, default=3, help="seeds per 200m cell K3 left in the plan")
     a = ap.parse_args()
     {"anchors": cmd_anchors, "embed": cmd_embed, "probe": cmd_probe, "g0": cmd_g0, "report": cmd_report}[a.cmd](a)
 
