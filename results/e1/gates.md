@@ -16,3 +16,13 @@ flat, railed or burst patches by this metric, so the quality contrast is large.
 
 ## Anchors (step 6): PASS
 574 test subjects (is_heldout), 978,519 anchors in total, 40,005 detect positives in test (needs 400 subjects and 2,000 positives). Fit 300 and tune 100 subjects.
+
+## G0, range gate: PASS, primary readout = detect (2026-11-21, job e1-g0, 1 H100)
+Checkpoint: newest `ckpt-00004827.pt` of the full-data 10M run. Test = 574 held-out subjects. Bits are test log loss differences per subject, paired subject bootstrap (2,000 resamples, seed 0).
+
+| Readout | Pretrained minus random weights (bits, 3 seeds) | 95% interval | Over band power | Over base rate |
+|---|---|---|---|---|
+| detect | +0.1244 | [+0.1144, +0.1346] | +0.1234 [+0.1123, +0.1354] | +0.1588 |
+| stage | pass (interval above 0) | | | +0.8498 |
+
+The range is large (the pilot A 30 s forecast had +0.0014 bits in total), so `detect` is the primary and `stage` the secondary. Band power does not beat the encoder here (K4 is not triggered by G0).
