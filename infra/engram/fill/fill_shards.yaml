@@ -1,0 +1,24 @@
+# CPU-only data prep for the pretraining sweep: the SHHS-1 download check and the training shards (no GPU held).
+# The token is a SkyPilot secret (redacted in logs), never written here. Resumable: every stage writes a marker
+# Sizing: network and CPU only: 24 shard builders (about 1.5 GB each) on 32 CPUs, 192 GB RAM. Data and shards go to /shared.
+name: fill-shards
+
+resources:
+  infra: slurm/slinky
+  cpus: 32
+  memory: 192
+  disk_size: 50
+
+workdir: .
+
+envs:
+  FILL_COMMIT: unknown
+  SHARDS_ONLY: 1
+
+secrets:
+  NSRR_TOKEN: null
+
+file_mounts:
+  ~/.nsrr-ca.pem: ~/.config/nsrr/ca-bundle.pem
+
+run: bash infra/engram/fill/fill_a.sh

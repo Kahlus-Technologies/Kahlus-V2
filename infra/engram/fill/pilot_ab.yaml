@@ -1,0 +1,21 @@
+# Pilots A and B on the kept partial SHHS-1 shards (1,902 nights) and the 10M checkpoint. Exploratory, not a claim.
+#   sky launch -c pilot-ab --down -i 1 -y --env GIT_COMMIT=$(git rev-parse HEAD) infra/engram/fill/pilot_ab.yaml
+# Run after pilot_ab_anchors.yaml printed PILOT_AB_ANCHORS_DONE (the CPU-only stage 1).
+# Sizing: 4 H100 (the captain's cap): embeddings and fine-tunes run one process per GPU. 64 CPUs: the anchors are already done; then
+# 4 GPUs x 8 loader workers, and the CPU probes. 256 GB RAM holds the embeddings (about 3 GB each) and the probe matrices.
+# disk_size is the OS volume only; shards, checkpoints and outputs are on /shared.
+name: pilot-ab
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:4
+  cpus: 64
+  memory: 256
+  disk_size: 50
+
+workdir: .
+
+envs:
+  GIT_COMMIT: unknown
+
+run: bash infra/engram/fill/pilot_ab.sh

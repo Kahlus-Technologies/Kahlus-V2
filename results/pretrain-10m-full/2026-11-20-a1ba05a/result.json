@@ -1,0 +1,33 @@
+{
+ "study": "pretrain-10m-full",
+ "kind": "exploratory infrastructure run, not a claim",
+ "provenance": {
+  "kahlus_v2_commit": "adcaf186e9265bc1467420ab897337dc19c5f975 (infra files later commits)",
+  "data_manifest": {
+   "shards_sha256": "e50b91a5a5ae5b6b00574b471ee55531b288144fd5ffe2fb5b41db514ee12da9",
+   "nights": 5793,
+   "patches": 175552950,
+   "source": "NSRR SHHS-1 mirror, 5793 EDF + 5793 XML, MD5-verified against the NSRR listing"
+  },
+  "prereg": null,
+  "seeds": [
+   0
+  ],
+  "gpu_hours": "about 0.8 (4 H100, 11.7 min of training plus benchmark)",
+  "steps": 4827,
+  "loss": [
+   2.9342,
+   2.3641
+  ],
+  "batch_windows_per_step": 2048,
+  "passes": 4.0,
+  "mesa": "never read"
+ },
+ "benchmark_headline": {
+  "subject_held_out_skill": {
+   "kahlus": 0.19055157990306015,
+   "ridge": 0.00897803554960841,
+   "gru": 0.0068923489577598085
+  }
+ }
+}

@@ -1,0 +1,107 @@
+{
+ "task": "forecast 4 s from 64 s, strictly future",
+ "checkpoint": {
+  "path": "/shared/aayu/fill-a/runs/full/kahlus-10m/ckpt-00004827.pt",
+  "size": "10m",
+  "train_datasets": [
+   "shhs"
+  ],
+  "steps": 4827,
+  "shards_sha256": "e50b91a5a5ae5b6b00574b471ee55531b288144fd5ffe2fb5b41db514ee12da9"
+ },
+ "test_dataset": null,
+ "shards_sha256": "e50b91a5a5ae5b6b00574b471ee55531b288144fd5ffe2fb5b41db514ee12da9",
+ "git": {
+  "commit": null,
+  "dirty": null,
+  "diff_sha256": null
+ },
+ "bootstrap_mode": "smoke",
+ "bootstrap_samples": 300,
+ "splits": {
+  "subject_held_out": {
+   "n_windows": 5000,
+   "n_subjects": 576,
+   "models": {
+    "zero": {
+     "status": "ok",
+     "skill": 0.0,
+     "skill_ci_low": 0.0,
+     "skill_ci_high": 0.0,
+     "skill_shift_control": 0.0,
+     "gain_over_shift": 0.0,
+     "skill_by_horizon_s": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "persistence": {
+     "status": "ok",
+     "skill": -0.9332474626754752,
+     "skill_ci_low": -1.0240364951010434,
+     "skill_ci_high": -0.83248808245102,
+     "skill_shift_control": -0.9814883470535278,
+     "gain_over_shift": 0.04824088437805263,
+     "skill_by_horizon_s": [
+      -0.9840942621231079,
+      -0.8867582082748413,
+      -0.9554119110107422,
+      -0.9064263105392456
+     ]
+    },
+    "ridge": {
+     "status": "ok",
+     "skill": 0.00897803554960841,
+     "skill_ci_low": 0.003953757223488824,
+     "skill_ci_high": 0.014541793616365113,
+     "skill_shift_control": -0.0039020776748657227,
+     "gain_over_shift": 0.012880113224474132,
+     "skill_by_horizon_s": [
+      0.021328985691070557,
+      0.004499316215515137,
+      0.0039481520652771,
+      0.006099581718444824
+     ]
+    },
+    "gru": {
+     "status": "ok",
+     "skill": 0.0068923489577598085,
+     "skill_ci_low": -0.00053575913151509,
+     "skill_ci_high": 0.015098544732837098,
+     "skill_shift_control": -0.027936100959777832,
+     "gain_over_shift": 0.03482844991753764,
+     "skill_by_horizon_s": [
+      0.032675862312316895,
+      0.001999497413635254,
+      -0.0043697357177734375,
+      -0.0027753114700317383
+     ]
+    },
+    "timesfm3": {
+     "status": "not_run",
+     "reason": "TimesFM-3 needs its package and pretrained weights; wire it in timesfm3_forecaster"
+    },
+    "sleepfm": {
+     "status": "not_run",
+     "reason": "SleepFM needs its code, pretrained weights and a forecasting probe; wire it in sleepfm_forecaster"
+    },
+    "kahlus": {
+     "status": "ok",
+     "skill": 0.19055157990306015,
+     "skill_ci_low": 0.1641894271435811,
+     "skill_ci_high": 0.21829982455041572,
+     "skill_shift_control": -0.17810451984405518,
+     "gain_over_shift": 0.36865609974711533,
+     "skill_by_horizon_s": [
+      0.3362553119659424,
+      0.19474267959594727,
+      0.13882720470428467,
+      0.09248536825180054
+     ]
+    }
+   }
+  }
+ }
+}

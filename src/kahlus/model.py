@@ -75,10 +75,9 @@ class KahlusPatchModel(nn.Module):
         second = torch.arange(cfg.context).repeat_interleave(cfg.n_channels)
         self.register_buffer("causal", second[:, None] >= second[None, :], persistent=False)
 
-    def predict(self, x: torch.Tensor, masked: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        """``x`` is ``(batch, seconds, channels, patch_len)``. Returns the rebuilt patches, same shape, and
-        the forecasts ``(batch, seconds, channels, horizon, patch_len)``."""
-        b, t, c, p = x.shape
+    def hidden(self, x: torch.Tensor, masked: torch.Tensor | None = None) -> torch.Tensor:
+        """Normed encoder states ``(batch, seconds, channels, d_model)``. The state at second s reads seconds 0..s only."""
+        b, t, c, _ = x.shape
         h = self.embed(x)
         if masked is not None:
             h = torch.where(masked[..., None], self.mask_token.to(h.dtype), h)
@@ -86,7 +85,17 @@ class KahlusPatchModel(nn.Module):
         mask = self.causal[: t * c, : t * c]
         for block in self.blocks:
             h = block(h, mask)
-        h = self.norm(h).view(b, t, c, -1)
+        return self.norm(h).view(b, t, c, -1)
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """The state of the last second of every window: ``(batch, channels, d_model)``, for probes and fine-tuning."""
+        return self.hidden(x)[:, -1]
+
+    def predict(self, x: torch.Tensor, masked: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """``x`` is ``(batch, seconds, channels, patch_len)``. Returns the rebuilt patches, same shape, and
+        the forecasts ``(batch, seconds, channels, horizon, patch_len)``."""
+        b, t, c, p = x.shape
+        h = self.hidden(x, masked)
         return self.recon(h), self.future(h).view(b, t, c, self.cfg.horizon, p)
 
     def forward(self, window: torch.Tensor, masked: torch.Tensor) -> torch.Tensor:
