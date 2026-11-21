@@ -28,6 +28,8 @@ run: |
     MAMBA_ROOT_PREFIX=$ROOT/mamba "$ROOT/bin/micromamba" create -y -q -p "$ROOT/git-env" -c conda-forge git
   fi
   export PATH=$ROOT/git-env/bin:$PATH
+  # The workdir sync drops the executable bit of shell scripts. Contents are checked by git; mode bits are not code.
+  git config core.fileMode false
   git config --global --add safe.directory '*'
   [[ -f $VENV/.ready ]] || { echo "no venv at $VENV"; exit 2; }
   M=$NSRR/mesa/polysomnography
