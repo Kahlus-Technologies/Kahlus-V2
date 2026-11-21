@@ -1,0 +1,42 @@
+# K7 on every SHHS-1 night (minus dev nights 200001-200025), as one CPU-only Engram job. No GPU.
+#   K7_COMMIT=$(git rev-parse HEAD) \
+#     sky launch -c kahlus-k7 --down -i 1 -y --env K7_COMMIT scripts/engram/k7_shhs1.yaml
+# Resumable: run_k7.py skips nights already cached under /shared. A rerun of the same command continues.
+# Sizing: 32 CPUs run 32 night workers (about 1.5 GB each at peak, so 64 GB RAM). No download here: the data is read from
+# the shared NSRR mirror on /shared, so disk_size is for the OS volume only. Start it only when the mirror is complete.
+name: kahlus-k7
+
+resources:
+  infra: slurm/slinky
+  cpus: 32
+  memory: 64
+  disk_size: 20
+
+workdir: .
+
+run: |
+  set -euo pipefail
+  umask 077
+  ROOT=/shared/aayu/kahlus; NSRR=/shared/aayu/nsrr; OUT=/shared/aayu/k7_shhs1
+  mkdir -p "$ROOT/bin" "$OUT"
+  chmod 700 "$OUT"
+  REPO=$PWD
+  VENV=$ROOT/venv-k7
+  if [[ ! -f $VENV/.ready ]]; then
+    [[ -x $ROOT/bin/uv ]] || curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$ROOT/bin" UV_NO_MODIFY_PATH=1 sh
+    export UV_PYTHON_INSTALL_DIR=$ROOT/python UV_CACHE_DIR=$ROOT/uv-cache
+    rm -rf "$VENV"; "$ROOT/bin/uv" venv -q --python 3.12 "$VENV"
+    "$ROOT/bin/uv" pip install -q --python "$VENV/bin/python" numpy scipy "scikit-learn>=1.5,<1.9" "mne>=1.6,<2"
+    touch "$VENV/.ready"
+  fi
+  # K7 reads the shared NSRR mirror that the pretraining job fills (same /shared/aayu/nsrr, gem layout). It never downloads.
+  E=$NSRR/shhs/polysomnography/edfs/shhs1; X=$NSRR/shhs/polysomnography/annotations-events-nsrr/shhs1
+  ne=$(ls "$E" 2>/dev/null | grep -c '\.edf$' || true); nx=$(ls "$X" 2>/dev/null | grep -c -- '-nsrr\.xml$' || true)
+  echo "mirror: $ne EDF, $nx XML"
+  [[ $ne -ge 5793 && $nx -ge 5793 ]] || { echo "mirror incomplete (need 5793 EDF and 5793 XML); stopping"; exit 3; }
+  du -sh "$NSRR"/shhs
+  cd "$REPO"
+  PYTHONPATH=src "$VENV/bin/python" scripts/run_k7.py --shhs "$NSRR/shhs/polysomnography" --exclude-dev-shhs \
+    --workers 32 --out "$OUT" > "$OUT/run_k7.log" 2>&1 || { tail -50 "$OUT/run_k7.log"; exit 1; }
+  echo K7_REPORT_BEGIN; cat "$OUT/report.json"; echo; echo K7_REPORT_END
+  echo K7_DONE

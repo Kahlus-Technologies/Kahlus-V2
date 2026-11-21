@@ -1,0 +1,54 @@
+# K7 on the sealed MESA nights (the confirmatory replication), CPU only, one Engram job. Start it only when the shared
+# NSRR mirror reports MESA complete. The final look is single use (src/kahlus/nsrr.py), so launch from a clean CLONE of the
+# commit, not from the worktree: the seal needs a real .git with docs/results/full_cohort_plan.md tracked and a clean tree.
+#   C=/tmp/k7-mesa-clone; rm -rf $C; git clone -q --no-hardlinks . $C
+#   (cd $C && K7_COMMIT=$(git rev-parse HEAD) sky launch -c k7-mesa --down -i 1 -y --env K7_COMMIT scripts/engram/k7_mesa.yaml)
+# Stage 1 is a dry run in dev mode (the 25 exposed nights): it proves the layout, environment and report path without
+# touching the seal. Stage 2 runs KAHLUS_MESA=final, which reads only the never-seen nights and writes the ledger entry
+# docs/results/mesa_final_looks/run_k7.json; it is printed between markers so it can be committed with the result.
+# If stage 2 fails after the claim, the look is used: do not rerun it, report it.
+name: k7-mesa
+
+resources:
+  infra: slurm/slinky
+  cpus: 32
+  memory: 64
+  disk_size: 20
+
+workdir: .
+
+run: |
+  set -euo pipefail
+  umask 077
+  ROOT=/shared/aayu/kahlus; NSRR=/shared/aayu/nsrr; C=${K7_COMMIT:-unknown}
+  VENV=$ROOT/venv-k7
+  # The node has no git and the seal shells out to it: take one from conda-forge into /shared, once.
+  if [[ ! -x $ROOT/git-env/bin/git ]]; then
+    [[ -x $ROOT/bin/micromamba ]] || { mkdir -p "$ROOT/bin"; curl -fLs -o "$ROOT/bin/micromamba" https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64 && chmod +x "$ROOT/bin/micromamba"; }
+    MAMBA_ROOT_PREFIX=$ROOT/mamba "$ROOT/bin/micromamba" create -y -q -p "$ROOT/git-env" -c conda-forge git
+  fi
+  export PATH=$ROOT/git-env/bin:$PATH
+  # The workdir sync drops the executable bit of shell scripts. Contents are checked by git; mode bits are not code.
+  git config core.fileMode false
+  git config --global --add safe.directory '*'
+  [[ -f $VENV/.ready ]] || { echo "no venv at $VENV"; exit 2; }
+  M=$NSRR/mesa/polysomnography
+  ne=$(ls "$M/edfs" 2>/dev/null | grep -c '\.edf$' || true); nx=$(ls "$M/annotations-events-nsrr" 2>/dev/null | grep -c -- '-nsrr\.xml$' || true)
+  echo "mesa mirror: $ne EDF, $nx XML"
+  [[ $ne -ge 2000 && $nx -ge 2000 ]] || { echo "MESA mirror incomplete; stopping"; exit 3; }
+  [[ $(git rev-parse HEAD) == "$C" ]] || { echo "workdir is not the commit $C"; exit 4; }
+  git ls-files --error-unmatch docs/results/full_cohort_plan.md > /dev/null
+  [[ -z $(git status --porcelain --untracked-files=no) ]] || { echo "workdir tree is not clean:"; git status --porcelain --untracked-files=no | head -20; git diff --stat | tail -5; exit 4; }
+  export PYTHONPATH=$PWD/src
+  echo "== stage 1: dry run, KAHLUS_MESA=dev"
+  KAHLUS_MESA=dev "$VENV/bin/python" scripts/run_k7.py --mesa "$M" --workers 32 --bootstrap 200 \
+    --out /shared/aayu/k7_mesa_dry/$C > /shared/aayu/k7_mesa_dry.log 2>&1 || { tail -40 /shared/aayu/k7_mesa_dry.log; exit 5; }
+  echo "dry run ok"
+  echo "== stage 2: final look"
+  mkdir -p /shared/aayu/k7_mesa_final; chmod 700 /shared/aayu/k7_mesa_final
+  OUT=/shared/aayu/k7_mesa_final/$C
+  KAHLUS_MESA=final "$VENV/bin/python" scripts/run_k7.py --mesa "$M" --workers 32 --out "$OUT" > /shared/aayu/k7_mesa_final.log 2>&1 \
+    || { tail -40 /shared/aayu/k7_mesa_final.log; echo "FINAL LOOK FAILED OR USED"; exit 6; }
+  echo K7_LEDGER_BEGIN; cat docs/results/mesa_final_looks/run_k7.json; echo; echo K7_LEDGER_END
+  echo K7_REPORT_BEGIN; cat "$OUT/report.json"; echo; echo K7_REPORT_END
+  echo K7_DONE

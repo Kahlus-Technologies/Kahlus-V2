@@ -1,0 +1,44 @@
+# K1 full run on SHHS-1 (minus dev nights 200001-200025), CPU only, one Engram job. Start it only when the shared NSRR
+# mirror prints NSRR_MIRROR_DONE with all MD5s verified and PR 19 is merged (data/gpu-runs-plan/pilots-ab-plan.md section 5):
+#   sky launch -c k1-full --down -i 1 -y --env GIT_COMMIT=$(git rev-parse HEAD) infra/engram/k1/k1_full.yaml
+# Primary: --normalize causal --bootstrap claim --seed 0 (recorded in report.json). Then seeds 1-4 and the scorer-lag
+# control (arousal onsets 1, 2, 3 s earlier). Feature building is parallel over 112 workers; all runs of one label set
+# share one feature cache, so seeds cost only the model fits. Resumable: finished runs (report.json) and cached nights are skipped.
+# Sizing: 120 CPUs and 400 GB: the cache of 5.8k nights is a few GB in RAM per run, workers need about 1.5 GB each.
+name: k1-full
+
+resources:
+  infra: slurm/slinky
+  cpus: 120
+  memory: 400
+  disk_size: 20
+
+workdir: .
+
+run: |
+  set -euo pipefail
+  umask 077
+  ROOT=/shared/aayu/kahlus; NSRR=/shared/aayu/nsrr; C=${GIT_COMMIT:-unknown}; OUT=/shared/aayu/k1/$C
+  mkdir -p "$OUT"; chmod 700 "$OUT"
+  VENV=$ROOT/venv-k7   # numpy, scipy, scikit-learn, mne: the same environment as K7
+  [[ -f $VENV/.ready ]] || { echo "no venv at $VENV: run the K7 job once or build it"; exit 2; }
+  E=$NSRR/shhs/polysomnography/edfs/shhs1; X=$NSRR/shhs/polysomnography/annotations-events-nsrr/shhs1
+  ne=$(ls "$E" | grep -c '\.edf$' || true); nx=$(ls "$X" | grep -c -- '-nsrr\.xml$' || true)
+  echo "mirror: $ne EDF, $nx XML"
+  [[ $ne -ge 5793 && $nx -ge 5793 ]] || { echo "mirror incomplete; stopping"; exit 3; }
+  [[ $(ls "$NSRR/mesa/polysomnography/edfs" 2>/dev/null | grep -c '\.edf$' || true) -ge 25 ]] || { echo "the 25 MESA dev EDFs are missing under $NSRR/mesa"; exit 4; }
+  export PYTHONPATH=$PWD/src OMP_NUM_THREADS=8 K1_COMMIT=$C
+  run() {  # name, lag, seed
+    local d=$OUT/$1
+    [[ -f $d/report.json ]] && { echo "have $1"; return; }
+    "$VENV/bin/python" scripts/run_heart_arousal_benchmark.py --mesa "$NSRR/mesa/polysomnography" --shhs "$NSRR/shhs/polysomnography" \
+      --out "$d" --cache "$OUT/cache_lag$2" --normalize causal --bootstrap claim --seed "$3" --arousal-lag-s "$2" \
+      --exclude-ids configs/data/shhs_dev_ids.txt --workers 112 > "$OUT/$1.log" 2>&1 || { tail -40 "$OUT/$1.log"; exit 1; }
+  }
+  run primary 0 0
+  for s in 1 2 3 4; do run seed$s 0 $s; done
+  for l in 1 2 3; do run lag$l $l 0; done
+  echo K1_REPORT_BEGIN
+  for f in "$OUT"/*/report.json; do echo "== $f"; cat "$f"; done
+  echo K1_REPORT_END
+  echo K1_DONE

@@ -184,8 +184,9 @@ def eeg_features(eeg: np.ndarray, fs: float, anchors: np.ndarray, *, window_s: f
     return out
 
 
-def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labels: tuple[str, ...], ppg_labels: tuple[str, ...] = ()) -> dict:
-    """Anchors, labels and every feature block for one night."""
+def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labels: tuple[str, ...], ppg_labels: tuple[str, ...] = (), arousal_lag_s: float = 0.0) -> dict:
+    """Anchors, labels and every feature block for one night. ``arousal_lag_s`` moves every scored arousal onset that many
+    seconds earlier (the scorer-lag control of the K1 preregistration); 0 changes nothing."""
     from kahlus.nsrr import load_nsrr_epoch_matrix, parse_nsrr_events
     from kahlus.qrs_fast import causal_beats
 
@@ -196,6 +197,8 @@ def build_recording(edf_path, xml_path, *, ecg_labels: tuple[str, ...], eeg_labe
     fs = m["sfreq"]
     flat = {g: m["epochs"][g][:, :, 0].ravel() for g in m["epochs"]}
     events = parse_nsrr_events(xml_path)
+    if arousal_lag_s:
+        events = [(c, s - arousal_lag_s, d) if event_kind(c) == "arousal" else (c, s, d) for c, s, d in events]
     anchors, labels = anchor_labels(events, total_s=flat["ecg"].size / fs)
     beat_times, rr = causal_beats(flat["ecg"], fs)
     blocks = {

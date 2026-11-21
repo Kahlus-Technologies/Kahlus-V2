@@ -34,6 +34,21 @@ How the work is kept honest:
 - **Sealed test cohort.** SHHS-1 is for development. MESA is scored once, after the plan is frozen, through a guard in code ([`docs/results/mesa_exposure.md`](docs/results/mesa_exposure.md)).
 - **Losses are results.** Nulls and negative results are reported.
 
+## Results
+
+The causal slow-oscillation trigger in this repo, replayed on recorded nights, fires just before scored arousals much more often than at matched moments in the same sleeper. For every would-be click we asked whether a spontaneous arousal starts within the next 3 seconds, and compared that with 5 control moments from the same night with the same sleep stage and the same time since the last arousal. Shifting the click times by half a night gives a relative risk of 1, as it should.
+
+| Cohort | Nights | Relative risk (click vs matched control) | Rotated-trigger control |
+| --- | --- | --- | --- |
+| SHHS-1, dev nights left out | 5,768 | 5.01 [4.83, 5.18] | 0.995 [0.962, 1.026] |
+| MESA, sealed, one look | 2,031 | 3.79 [3.56, 4.02] | 1.004 [0.945, 1.070] |
+
+Intervals are 95%, from 2,000 resamples of whole subjects. The setting was fixed in the preregistration before any run: trigger at -40 µV, stages N2 and N3, 3 s window.
+
+This is a replay measurement of when the trigger would fire relative to scored arousals. No sound was played, so it says nothing about what clicks do to sleep. Slow waves and K-complexes are already known to be part of micro-arousals. This work only measures where this particular trigger points, in two cohorts.
+
+Preregistration: [`docs/prereg/k1-k7.md`](docs/prereg/k1-k7.md), full file [`docs/results/k7_k1_s1_preregistration.md`](docs/results/k7_k1_s1_preregistration.md) (SHA-256 `9391ffad657b9395eb6ba1885291bcbe98b3755df3880de202e7a2fda6c7a94a`). Results: [`results/k7-shhs1/`](results/k7-shhs1/2026-11-21-dda45d8/summary.md), [`results/k7-mesa/`](results/k7-mesa/2026-11-21-3a895b0/summary.md) and the 50-night pilot [`results/k7-dev-slice/`](results/k7-dev-slice/2026-11-19-f7bf2de/summary.md). The MESA final-look ledger is [`docs/results/mesa_final_looks/run_k7.json`](docs/results/mesa_final_looks/run_k7.json).
+
 ## Results so far
 
 > Every number below comes from a dev slice of 25 MESA + 25 SHHS nights with a smoke bootstrap. None of them is a claim until the full-cohort run.
