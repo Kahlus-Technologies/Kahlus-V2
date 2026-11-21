@@ -36,7 +36,7 @@ run: |
   [[ $ne -ge 2000 && $nx -ge 2000 ]] || { echo "MESA mirror incomplete; stopping"; exit 3; }
   [[ $(git rev-parse HEAD) == "$C" ]] || { echo "workdir is not the commit $C"; exit 4; }
   git ls-files --error-unmatch docs/results/full_cohort_plan.md > /dev/null
-  [[ -z $(git status --porcelain --untracked-files=no) ]] || { echo "workdir tree is not clean"; exit 4; }
+  [[ -z $(git status --porcelain --untracked-files=no) ]] || { echo "workdir tree is not clean:"; git status --porcelain --untracked-files=no | head -20; git diff --stat | tail -5; exit 4; }
   export PYTHONPATH=$PWD/src
   echo "== stage 1: dry run, KAHLUS_MESA=dev"
   KAHLUS_MESA=dev "$VENV/bin/python" scripts/run_k7.py --mesa "$M" --workers 32 --bootstrap 200 \
