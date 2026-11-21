@@ -46,5 +46,14 @@ case ${STAGE:?} in
     log "pilots phase 2"; $PY "$REPO/scripts/e1_queue.py" "$J2" --gpus "${NGPU:-4}"
     $PY "$REPO/scripts/e1_freeze.py" big --work "$E1" | tee "$E1/frozen.log"
     echo E1_PILOTS_DONE ;;
+  rung1|rung2)
+    RUN1="env REPO=$REPO PY=$PY E1=$E1 bash $REPO/infra/engram/e1/run_one.sh"
+    J=$E1/$STAGE.jobs
+    $PY "$REPO/scripts/e1_jobs.py" "$STAGE" --work "$E1" --run1 "$RUN1" > "$J"
+    log "$STAGE: $(wc -l < "$J") runs to do"
+    $PY "$REPO/scripts/e1_queue.py" "$J" --gpus "${NGPU:-4}"
+    [[ $STAGE == rung1 ]] && $PY "$REPO/scripts/e1_eval.py" k2 --work "$E1"
+    [[ $STAGE == rung2 ]] && { $PY "$REPO/scripts/e1_eval.py" report --work "$E1"; cat "$E1/report.md"; }
+    echo "E1_${STAGE^^}_DONE" ;;
   *) echo "unknown STAGE $STAGE" >&2; exit 2 ;;
 esac

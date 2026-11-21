@@ -240,6 +240,34 @@ def cmd_g0tune(a):
     print("g0tune done")
 
 
+def cmd_k2(a):
+    """K2 and the 200M prediction: does any arm at 50M beat its 10M result on the primary at r1 (interval above 0)? If not, 200M runs at r1 only.
+    Also the line through each arm's 10M and 50M test loss against log10(parameters) and the 200M loss it predicts."""
+    from kahlus.model import SIZES as SPEC
+    from kahlus.model import KahlusPatchModel, ModelConfig, n_params
+
+    work = Path(a.work)
+    an = np.load(work / "anchors.npz")
+    frozen = json.loads((work / "frozen.json").read_text())
+    readout = json.loads((work / "g0.json").read_text())["primary"]
+    test_subj = sorted(set(an["subj"][an["split"] == 2].tolist()))
+    rng = np.random.default_rng(0)
+    x = {s: math.log10(n_params(KahlusPatchModel(ModelConfig(**SPEC[s], mlp_head=True)))) for s in SIZES}
+    out = {"beats": {}, "prediction": {}}
+    for arm in frozen["arms"]:
+        ls = {s: np.mean([np.load(work / "runs" / RUNS.format(arm=arm, size=s, cell="r1", seed=sd) / "probe.npz")[readout] for sd in SEEDS], 0)
+              for s in ("10m", "50m")}
+        m, lo, hi, _, k = pa.boot(((ls["10m"] - ls["50m"]) / LN2)[test_subj], rng)
+        out["beats"][arm] = {"bits_10m_minus_50m": [m, lo, hi], "beats": bool(lo > 0), "subjects": k}
+        y10, y50 = (float(np.nanmean(ls[s][test_subj])) for s in ("10m", "50m"))
+        slope = (y50 - y10) / (x["50m"] - x["10m"])
+        out["prediction"][arm] = {"loss_10m_nats": y10, "loss_50m_nats": y50, "slope_per_decade": slope, "predicted_loss_200m_nats": y50 + slope * (x["200m"] - x["50m"])}
+    out["cells_200m"] = frozen["cells_200m"] if any(v["beats"] for v in out["beats"].values()) else ["r1"]
+    (work / "k2.json").write_text(json.dumps(out, indent=1))
+    print(json.dumps(out, indent=1))
+    print("K2_DONE cells_200m=" + ",".join(out["cells_200m"]))
+
+
 RUNS = "{arm}-{size}-{cell}-s{seed}"
 ARMS, SIZES, SEEDS = ("signal", "latent"), ("10m", "50m", "200m"), (0, 1, 2)
 
@@ -257,8 +285,10 @@ def planned(rung2_cells=None, seeds_200m=3, arms=ARMS):
 
 def cmd_report(a):
     work = Path(a.work)
-    cuts = a.cells_200m.split(",") if a.cells_200m else None
     frozen = json.loads((work / "frozen.json").read_text()) if (work / "frozen.json").exists() else {}
+    k2 = json.loads((work / "k2.json").read_text()) if (work / "k2.json").exists() else {}
+    cuts = a.cells_200m.split(",") if a.cells_200m else k2.get("cells_200m")
+    a.seeds_200m = frozen.get("seeds_200m", a.seeds_200m)
     arms = tuple(frozen.get("arms", ARMS))
     missing = [r for r in planned(cuts, a.seeds_200m, arms) if not (work / "runs" / r / "probe.npz").exists()]
     if missing:
@@ -325,7 +355,7 @@ def cmd_report(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("cmd", choices=("anchors", "embed", "probe", "g0", "g0tune", "report"))
+    ap.add_argument("cmd", choices=("anchors", "embed", "probe", "g0", "g0tune", "k2", "report"))
     ap.add_argument("--shards", default="/shared/aayu/fill-a/shards/shhs1-full")
     ap.add_argument("--nsrr", default="/shared/aayu/nsrr/shhs/polysomnography")
     ap.add_argument("--work", default="/shared/aayu/e1")
@@ -339,7 +369,7 @@ def main():
     ap.add_argument("--cells-200m", help="comma list of 200m cells K2 or K3 left in the plan")
     ap.add_argument("--seeds-200m", type=int, default=3, help="seeds per 200m cell K3 left in the plan")
     a = ap.parse_args()
-    {"anchors": cmd_anchors, "embed": cmd_embed, "probe": cmd_probe, "g0": cmd_g0, "g0tune": cmd_g0tune, "report": cmd_report}[a.cmd](a)
+    {"anchors": cmd_anchors, "embed": cmd_embed, "probe": cmd_probe, "g0": cmd_g0, "g0tune": cmd_g0tune, "k2": cmd_k2, "report": cmd_report}[a.cmd](a)
 
 
 if __name__ == "__main__":

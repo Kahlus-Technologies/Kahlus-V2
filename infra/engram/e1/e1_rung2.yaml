@@ -1,0 +1,19 @@
+# E1 rung2 on 4 H100, one run per GPU, at most 4 at once; runs skip themselves when done.json exists.
+#   sky launch -c e1-rung2 --down -i 1 -y infra/engram/e1/e1_rung2.yaml   (infra/engram/e1/until_done.sh relaunches it after a stop)
+# 4 GPUs (the captain cap), 32 CPUs (6 loader workers per run), 192 GB RAM (the embedding matrix of 978k windows is up to 4 GB per run).
+name: e1-rung2
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:4
+  cpus: 32
+  memory: 192
+  disk_size: 50
+
+workdir: .
+
+envs:
+  STAGE: rung2
+
+run: bash infra/engram/e1/e1.sh
+
