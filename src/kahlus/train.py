@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
+import hashlib
 import json
 import math
 import os
+import re
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -28,15 +31,15 @@ import torch.distributed as dist
 from kahlus.model import SIZES, KahlusPatchModel, ModelConfig, n_params
 from kahlus.nsrr import mesa_fit_allowed
 from kahlus.run_env import record
-from kahlus.shards import ShardSet, Windows
+from kahlus.shards import ShardSet, Windows, is_heldout
 
 
 class MicroBatches(torch.utils.data.Dataset):
     """Item i is the whole micro-batch i of one rank: the windows and which tokens are masked."""
 
-    def __init__(self, windows: Windows, *, total: int, batch: int, context: int, mask_ratio: float, seed: int, rank: int):
+    def __init__(self, windows: Windows, *, total: int, batch: int, context: int, mask_ratio: float, seed: int, rank: int, ecg_drop: float = 0.0):
         self.windows, self.total, self.batch, self.context = windows, total, batch, context
-        self.mask_ratio, self.seed, self.rank = mask_ratio, seed, rank
+        self.mask_ratio, self.seed, self.rank, self.ecg_drop = mask_ratio, seed, rank, ecg_drop
 
     def __len__(self) -> int:
         return self.total
@@ -45,6 +48,8 @@ class MicroBatches(torch.utils.data.Dataset):
         rng = np.random.default_rng([self.seed, self.rank, i])
         x = self.windows.batch(rng, self.batch)
         masked = rng.random((self.batch, self.context, x.shape[2])) < self.mask_ratio
+        if self.ecg_drop and x.shape[2] > 1:
+            masked[rng.random(self.batch) < self.ecg_drop, :, 1] = True  # E1: all ECG tokens of these windows are hidden and carry no loss
         return torch.from_numpy(x), torch.from_numpy(masked)
 
 
@@ -115,6 +120,10 @@ def main(argv=None) -> None:
     ap.add_argument("--amp", choices=("auto", "bf16", "off"), default="auto", help="auto: bf16 on CUDA, off on CPU")
     ap.add_argument("--compile", action="store_true", help="torch.compile the model")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--objective", choices=("signal", "latent"), default="signal", help="latent: targets are the hidden states of a slow copy of the encoder (E1)")
+    ap.add_argument("--head", choices=("linear", "mlp"), default="linear", help="mlp: Linear, GELU, Linear heads (E1)")
+    ap.add_argument("--ecg-drop", type=float, default=0.0, help="share of windows whose ECG tokens are all masked and carry no loss")
+    ap.add_argument("--night-list", help="file of SHHS subject IDs to train on; a held-out or dev ID in it is an error")
     args = ap.parse_args(argv)
     if not mesa_fit_allowed():
         raise SystemExit("KAHLUS_MESA=final is evaluation-only: training refuses to run")
@@ -136,17 +145,30 @@ def main(argv=None) -> None:
 
     shards = ShardSet(args.shards)
     cfg = ModelConfig(**SIZES[args.size], n_channels=len(shards.index["channels"]), patch_len=shards.index["patch_len"],
-                      context=args.context, horizon=args.horizon, qk_norm=args.qk_norm)
+                      context=args.context, horizon=args.horizon, qk_norm=args.qk_norm,
+                      objective=args.objective, mlp_head=args.head == "mlp")
     missing = sorted(set(args.train_datasets) - {n["dataset"] for n in shards.nights})
     if missing:
         raise SystemExit(f"--train-datasets {missing} have no readable nights in {args.shards}")
     train_nights = shards.select(args.train_datasets, heldout=False)  # subject-held-out: these subjects only
+    list_sha = None
+    if args.night_list:
+        listed = Path(args.night_list).read_text().split()
+        list_sha = hashlib.sha256("\n".join(sorted(listed)).encode()).hexdigest()
+        bad = [i for i in listed if is_heldout("shhs", i) or 200001 <= int(re.sub(r"\D", "0", i) or 0) <= 200025]
+        if bad:
+            raise SystemExit(f"--night-list holds held-out or dev subjects: {bad[:5]}")
+        train_nights = [n for n in train_nights if n["subject"] in set(listed)]
     n_patches = sum(n["n"] for n in train_nights)
     if not n_patches:
         raise SystemExit(f"--train-datasets {args.train_datasets} have no subject outside the held-out set in {args.shards}")
     epochs = plan_run(args, n_patches, world)
     torch.manual_seed(args.seed)  # every rank builds the same initial weights
     model = KahlusPatchModel(cfg).to(device)
+    teacher = None
+    if args.objective == "latent":  # a slow copy of the encoder with no gradient; the heads are never used
+        teacher = copy.deepcopy(model).requires_grad_(False).eval()
+        teacher.recon = teacher.future = None
     decay = [p for p in model.parameters() if p.ndim >= 2]
     no_decay = [p for p in model.parameters() if p.ndim < 2]
     opt = torch.optim.AdamW([{"params": decay, "weight_decay": args.weight_decay}, {"params": no_decay, "weight_decay": 0.0}],
@@ -154,7 +176,8 @@ def main(argv=None) -> None:
 
     # Everything that must match for a resumed run to equal an uninterrupted one.
     identity = {k: getattr(args, k) for k in ("size", "steps", "batch", "accum", "mask_ratio", "lr", "warmup", "schedule", "decay_frac",
-                                              "weight_decay", "seed")}
+                                              "weight_decay", "seed", "objective", "head", "ecg_drop")}
+    identity["night_list_sha256"] = list_sha
     identity |= {"model": asdict(cfg), "train_datasets": sorted(args.train_datasets), "world": world, "amp": amp,
                  "shards_sha256": shards.sha256}
     start = 0
@@ -165,6 +188,8 @@ def main(argv=None) -> None:
             diff = {k: (state["identity"].get(k), v) for k, v in identity.items() if state["identity"].get(k) != v}
             raise SystemExit(f"{ckpt} was written by a different run (checkpoint, now): {diff}. Use a new --out.")
         model.load_state_dict(state["model"])
+        if teacher is not None:
+            teacher.load_state_dict(state["teacher"])
         opt.load_state_dict(state["opt"])
         start = state["step"]
     log_path = out / "log.jsonl"
@@ -185,14 +210,15 @@ def main(argv=None) -> None:
 
     windows = Windows(shards, train_nights, args.context + args.horizon)
     data = MicroBatches(windows, total=args.steps * args.accum, batch=args.batch, context=args.context,
-                        mask_ratio=args.mask_ratio, seed=args.seed, rank=rank)
+                        mask_ratio=args.mask_ratio, seed=args.seed, rank=rank, ecg_drop=args.ecg_drop)
     loader = iter(torch.utils.data.DataLoader(
         data, batch_size=None, sampler=range(start * args.accum, len(data)), num_workers=args.workers,
         pin_memory=cuda, prefetch_factor=4 if args.workers else None))
 
     def save(step: int) -> None:
         tmp = out / f"ckpt-{step:08d}.pt.tmp"
-        torch.save({"step": step, "model": model.state_dict(), "opt": opt.state_dict(), "identity": identity}, tmp)
+        torch.save({"step": step, "model": model.state_dict(), "opt": opt.state_dict(), "identity": identity,
+                    **({"teacher": teacher.state_dict()} if teacher is not None else {})}, tmp)
         os.replace(tmp, out / f"ckpt-{step:08d}.pt")  # a kill leaves the old checkpoint or the new one, never half
         for old in sorted(out.glob("ckpt-*.pt"))[: -args.keep]:
             old.unlink()
@@ -213,7 +239,11 @@ def main(argv=None) -> None:
             sync = world == 1 or k == args.accum - 1
             with contextlib.nullcontext() if sync else net.no_sync():
                 with torch.autocast(device.type, dtype=torch.bfloat16, enabled=amp):
-                    parts = net(x, masked)
+                    th = None
+                    if teacher is not None:
+                        with torch.no_grad():
+                            th = teacher.hidden(x)
+                    parts = net(x, masked, th)
                 (parts[0] / args.accum).backward()
             losses += parts.detach().float() / args.accum
         if world > 1:
@@ -224,12 +254,19 @@ def main(argv=None) -> None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         opt.zero_grad(set_to_none=True)
+        if teacher is not None:  # slow teacher: momentum from 0.996 to 1.0 over the run
+            m = 0.996 + 0.004 * (step + 1) / args.steps
+            tp = dict(teacher.named_parameters())
+            with torch.no_grad():
+                for name, p in model.named_parameters():
+                    if name in tp:
+                        tp[name].mul_(m).add_(p.detach(), alpha=1 - m)
 
         done = step + 1
         if rank == 0 and (done % args.log_every == 0 or done == args.steps):
             wall = time.perf_counter() - t_mark
             row = {"step": done, "loss": losses[0].item(), "masked": losses[1].item(), "future": losses[2].item(),
-                   "lr": opt.param_groups[0]["lr"], "data_wait_frac": round(t_data / wall, 4),
+                   "lr": opt.param_groups[0]["lr"], **({"target_std": float(model.last_target_std)} if teacher is not None else {}), "data_wait_frac": round(t_data / wall, 4),
                    "patches_per_s": round((done - logged) * args.accum * args.batch * world * args.context * cfg.n_channels / wall)}
             with open(log_path, "a") as f:
                 f.write(json.dumps(row) + "\n")

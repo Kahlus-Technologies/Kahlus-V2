@@ -37,6 +37,8 @@ class ModelConfig:
     context: int = 64
     horizon: int = 4
     qk_norm: bool = True  # LayerNorm on queries and keys; bounds attention logits (arXiv 2309.14322)
+    objective: str = "signal"  # "signal": targets are patches. "latent": targets are hidden states of a slow copy of the encoder
+    mlp_head: bool = False  # heads are Linear(d, d), GELU, Linear(d, out) instead of one Linear (E1); old checkpoints have False
 
 
 class Block(nn.Module):
@@ -67,12 +69,17 @@ class KahlusPatchModel(nn.Module):
         self.embed = nn.Linear(cfg.patch_len, d)
         self.mask_token = nn.Parameter(torch.randn(d) * 0.02)
         self.channel = nn.Parameter(torch.randn(cfg.n_channels, d) * 0.02)
-        self.time = nn.Parameter(torch.randn(cfg.context, d) * 0.02)
+        # the latent teacher also reads the horizon seconds after the context, so its time table is longer
+        seconds = cfg.context + (cfg.horizon if cfg.objective == "latent" else 0)
+        self.time = nn.Parameter(torch.randn(seconds, d) * 0.02)
         self.blocks = nn.ModuleList(Block(d, cfg.n_heads, cfg.qk_norm) for _ in range(cfg.n_layers))
         self.norm = nn.LayerNorm(d)
-        self.recon = nn.Linear(d, cfg.patch_len)
-        self.future = nn.Linear(d, cfg.horizon * cfg.patch_len)
-        second = torch.arange(cfg.context).repeat_interleave(cfg.n_channels)
+        out = d if cfg.objective == "latent" else cfg.patch_len
+        head = (lambda n: nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, n))) if cfg.mlp_head else (lambda n: nn.Linear(d, n))
+        self.recon = head(out)
+        self.future = head(cfg.horizon * out)
+        self.last_target_std = torch.zeros(())  # latent only: mean over features of the std over tokens of the targets
+        second = torch.arange(seconds).repeat_interleave(cfg.n_channels)
         self.register_buffer("causal", second[:, None] >= second[None, :], persistent=False)
 
     def hidden(self, x: torch.Tensor, masked: torch.Tensor | None = None) -> torch.Tensor:
@@ -96,24 +103,37 @@ class KahlusPatchModel(nn.Module):
         the forecasts ``(batch, seconds, channels, horizon, patch_len)``."""
         b, t, c, p = x.shape
         h = self.hidden(x, masked)
-        return self.recon(h), self.future(h).view(b, t, c, self.cfg.horizon, p)
+        return self.recon(h), self.future(h).view(b, t, c, self.cfg.horizon, -1)
 
-    def forward(self, window: torch.Tensor, masked: torch.Tensor) -> torch.Tensor:
-        """Training losses for ``window`` of ``context + horizon`` seconds: ``[total, masked, future]``."""
+    def forward(self, window: torch.Tensor, masked: torch.Tensor, teacher_hidden: torch.Tensor | None = None) -> torch.Tensor:
+        """Training losses for ``window`` of ``context + horizon`` seconds: ``[total, masked, future]``.
+        ``teacher_hidden`` (latent objective) is the unmasked teacher's states for the whole window; its layer-normed
+        values replace the signal as targets. Windows whose ECG tokens are all masked (the ECG-drop of E1) carry no
+        loss on the ECG tokens."""
         t, hz = self.cfg.context, self.cfg.horizon
         x = window[:, :t]
         recon, future = self.predict(x, masked)
-        m = masked[..., None].float()
-        l_masked = (((recon.float() - x) ** 2) * m).sum() / (m.sum() * x.shape[-1]).clamp(min=1)
-        # Target of the token at second s: seconds s+1 .. s+horizon of the same channel.
-        target = window.unfold(1, hz, 1)[:, 1 : t + 1].permute(0, 1, 2, 4, 3)
-        l_future = F.mse_loss(future.float(), target)
+        seq = window if teacher_hidden is None else F.layer_norm(teacher_hidden.float(), teacher_hidden.shape[-1:])
+        if teacher_hidden is not None:
+            self.last_target_std = seq.flatten(0, 2).std(0).mean().detach()
+        w = torch.ones_like(masked, dtype=torch.float32)
+        if x.shape[2] > 1:
+            w[:, :, 1] = 1 - masked[:, :, 1].all(1, keepdim=True).float()  # 1 = ECG token counts
+        m = (masked.float() * w)[..., None]
+        l_masked = (((recon.float() - seq[:, :t]) ** 2) * m).sum() / (m.sum() * recon.shape[-1]).clamp(min=1)
+        l_future = (((future.float() - future_targets(seq, t, hz)) ** 2) * w[..., None, None]).sum() / (w.sum() * hz * future.shape[-1])
         return torch.stack([l_masked + l_future, l_masked, l_future])
 
     @torch.no_grad()
     def forecast(self, context: torch.Tensor) -> torch.Tensor:
         """Strictly-future forecast ``(batch, horizon, channels, patch_len)`` from unmasked context."""
         return self.predict(context)[1][:, -1].transpose(1, 2)
+
+
+def future_targets(seq: torch.Tensor, t: int, hz: int) -> torch.Tensor:
+    """Target of the token at second s: seconds s+1 .. s+horizon of the same channel, ``(batch, t, channels, horizon, features)``.
+    Never a second at or before s."""
+    return seq.unfold(1, hz, 1)[:, 1 : t + 1].permute(0, 1, 2, 4, 3)
 
 
 def n_params(model: nn.Module) -> int:
