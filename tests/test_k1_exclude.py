@@ -9,7 +9,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_heart_arousal_benchmark as bench  # noqa: E402
 
-from kahlus.heart_arousal import anchor_labels, build_recording  # noqa: E402
+from kahlus.heart_arousal import build_recording  # noqa: E402
 from kahlus.nsrr import read_id_list  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]

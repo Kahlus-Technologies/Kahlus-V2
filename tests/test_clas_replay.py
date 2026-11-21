@@ -7,8 +7,8 @@ import numpy as np
 from kahlus.clas_replay import (
     GUARD_S,
     MEAN_DIFFERENCE,
-    RELATIVE_RISK,
     REFRACTORY_S,
+    RELATIVE_RISK,
     clicks_before_arousal,
     first_of_runs,
     hr_change,
