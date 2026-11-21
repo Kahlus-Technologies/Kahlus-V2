@@ -1,0 +1,16 @@
+{
+  "commit": "3a895b0689f2565c1cc146d372adcc5b22d7e214",
+  "plan_sha256": "ab1d5dfcdcae3074670122a10fb4902cb953a4da307646471c511c3822655a6c",
+  "script": "run_k7",
+  "argv": [
+    "scripts/run_k7.py",
+    "--mesa",
+    "/shared/aayu/nsrr/mesa/polysomnography",
+    "--workers",
+    "32",
+    "--out",
+    "/shared/aayu/k7_mesa_final/3a895b0689f2565c1cc146d372adcc5b22d7e214"
+  ],
+  "pid": 404805,
+  "utc": "2026-11-21T15:55:47Z"
+}
