@@ -228,6 +228,18 @@ def cmd_g0(a):
     print(f"G0_VERDICT primary={primary}" if primary else "G0_VERDICT E1_STOPS: neither detect nor stage beats random weights")
 
 
+def cmd_g0tune(a):
+    """Add the tune scores to the G0 random-weights probes (they were written before tune_scores existed)."""
+    work = Path(a.work)
+    an = np.load(work / "anchors.npz")
+    for s in range(3):
+        f = work / f"g0-random{s}.npz"
+        old = dict(np.load(f))
+        if "tune_detect" not in old:
+            np.savez(f, **old, **tune_scores(np.load(work / f"g0-random{s}.npy").astype(np.float32), an))
+    print("g0tune done")
+
+
 RUNS = "{arm}-{size}-{cell}-s{seed}"
 ARMS, SIZES, SEEDS = ("signal", "latent"), ("10m", "50m", "200m"), (0, 1, 2)
 
@@ -313,7 +325,7 @@ def cmd_report(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("cmd", choices=("anchors", "embed", "probe", "g0", "report"))
+    ap.add_argument("cmd", choices=("anchors", "embed", "probe", "g0", "g0tune", "report"))
     ap.add_argument("--shards", default="/shared/aayu/fill-a/shards/shhs1-full")
     ap.add_argument("--nsrr", default="/shared/aayu/nsrr/shhs/polysomnography")
     ap.add_argument("--work", default="/shared/aayu/e1")
@@ -327,7 +339,7 @@ def main():
     ap.add_argument("--cells-200m", help="comma list of 200m cells K2 or K3 left in the plan")
     ap.add_argument("--seeds-200m", type=int, default=3, help="seeds per 200m cell K3 left in the plan")
     a = ap.parse_args()
-    {"anchors": cmd_anchors, "embed": cmd_embed, "probe": cmd_probe, "g0": cmd_g0, "report": cmd_report}[a.cmd](a)
+    {"anchors": cmd_anchors, "embed": cmd_embed, "probe": cmd_probe, "g0": cmd_g0, "g0tune": cmd_g0tune, "report": cmd_report}[a.cmd](a)
 
 
 if __name__ == "__main__":

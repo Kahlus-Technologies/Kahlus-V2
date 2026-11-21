@@ -35,6 +35,7 @@ case ${STAGE:?} in
       done; done
     done
     log "pilots phase 1"; $PY "$REPO/scripts/e1_queue.py" "$J1" --gpus "${NGPU:-4}"
+    $PY "$REPO/scripts/e1_eval.py" g0tune --work "$E1"
     $PY "$REPO/scripts/e1_freeze.py" 10m --work "$E1"
     J2=$E1/pilots2.jobs; : > "$J2"
     for size in 200m 50m; do for arm in signal latent; do
