@@ -1,0 +1,17 @@
+# E1 steps 4 to 6 on CPU only: night lists, quality gate GQ, readout anchors. No GPU is held.
+#   sky launch -c e1-cpu --down -i 1 -y infra/engram/e1/e1_cpu.yaml
+# 64 CPUs: 60 workers read the 5,793 EDFs (two channels each) and the XMLs; 128 GB RAM.
+name: e1-cpu
+
+resources:
+  infra: slurm/slinky
+  cpus: 64
+  memory: 128
+  disk_size: 50
+
+workdir: .
+
+envs:
+  STAGE: cpu
+
+run: bash infra/engram/e1/e1.sh

@@ -1,0 +1,18 @@
+# E1 gate G0 on one H100: embed and probe the newest full-data 10M checkpoint, random weights (seeds 0-2) and band power.
+#   sky launch -c e1-g0 --down -i 1 -y infra/engram/e1/e1_g0.yaml
+# 1 GPU (one process), 16 CPUs for the window loaders and the probes, 64 GB RAM for the embedding matrices.
+name: e1-g0
+
+resources:
+  infra: slurm/slinky
+  accelerators: H100:1
+  cpus: 16
+  memory: 64
+  disk_size: 50
+
+workdir: .
+
+envs:
+  STAGE: g0
+
+run: bash infra/engram/e1/e1.sh
